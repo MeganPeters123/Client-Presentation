@@ -8,7 +8,7 @@ A static, client-side dashboard for preparing AUM, asset allocation and trade re
 2. Upload three files under **Data**:
    - **AUM History** — one row per period, with a date column and a total AUM column.
    - **Asset Allocation** — one row per asset class, with a category column and a value (or weight) column.
-   - **Trade Records** — one row per trade, with date, security, buy/sell type, and value (quantity/price optional).
+   - **Trade Records** — one row per trade, with date, security, buy/sell type, and value (quantity/price optional). You can upload **more than one trade file** — e.g. one export per broker/platform — each gets its own column mapping and they're merged into a single trade table (with a "Source" column and filter once 2+ files are loaded). Re-uploading a file with the same name replaces just that file's rows.
    - `.csv` or `.xlsx` both work. Sample files are linked under the upload panel.
 3. After each upload, confirm the column mapping (it's auto-guessed from your headers).
 4. The dashboard builds itself: KPIs, an AUM trend chart, an asset allocation breakdown, and a filterable/sortable trade table.

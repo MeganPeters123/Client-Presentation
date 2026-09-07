@@ -7,15 +7,15 @@ const FIELD_DEFS = {
     { key: "aum", label: "AUM value", type: "number", synonyms: ["aum", "totalvalue", "fundvalue", "netassetvalue", "nav", "marketvalue", "totalaum", "value"] }
   ],
   allocation: [
-    { key: "category", label: "Category / Asset class", type: "text", synonyms: ["category", "assetclass", "class", "segment", "allocation", "name"] },
+    { key: "category", label: "Category / Asset class", type: "text", synonyms: ["assetclass", "categoryname", "category", "class", "segment", "allocation"] },
     { key: "value", label: "Value or weight", type: "number", synonyms: ["value", "marketvalue", "amount", "weight", "pct", "percent", "percentage"] }
   ],
   trades: [
     { key: "date", label: "Date", type: "date", synonyms: ["date", "tradedate", "dealdate"] },
-    { key: "security", label: "Security", type: "text", synonyms: ["security", "instrument", "name", "ticker", "stock", "counter"] },
-    { key: "type", label: "Buy / Sell", type: "text", synonyms: ["type", "buysell", "side", "action", "direction", "transactiontype"] },
+    { key: "security", label: "Security", type: "text", synonyms: ["securitydescription", "securityname", "issuename", "instrumentcode", "instrumentname", "security", "instrument", "ticker", "stock", "counter"] },
+    { key: "type", label: "Buy / Sell", type: "text", synonyms: ["transactiontype", "trancode", "trantype", "buysell", "type", "side", "action", "direction"] },
     { key: "quantity", label: "Quantity", type: "number", optional: true, synonyms: ["quantity", "qty", "units", "shares", "volume"] },
-    { key: "price", label: "Price", type: "number", optional: true, synonyms: ["price", "unitprice", "executionprice", "dealprice"] },
+    { key: "price", label: "Price", type: "number", optional: true, synonyms: ["price", "unitprice", "executionprice", "dealprice", "dealrate"] },
     { key: "value", label: "Value", type: "number", synonyms: ["value", "amount", "consideration", "tradevalue", "marketvalue"] }
   ]
 };
@@ -29,8 +29,21 @@ function guessMapping(headers, fieldDefs) {
   const mapping = {};
   for (const def of fieldDefs) {
     let found = normHeaders.find(h => h.norm === def.key);
-    if (!found) found = normHeaders.find(h => def.synonyms.includes(h.norm));
-    if (!found) found = normHeaders.find(h => def.synonyms.some(s => h.norm.includes(s)));
+    // exact match against each synonym, tried in priority order, before any loose substring match —
+    // otherwise a generic synonym (e.g. "name") can grab an unrelated column like "Account Name"
+    // before a more specific one (e.g. "Security Description") is even considered.
+    if (!found) {
+      for (const syn of def.synonyms) {
+        found = normHeaders.find(h => h.norm === syn);
+        if (found) break;
+      }
+    }
+    if (!found) {
+      for (const syn of def.synonyms) {
+        found = normHeaders.find(h => h.norm.includes(syn));
+        if (found) break;
+      }
+    }
     mapping[def.key] = found ? found.raw : "";
   }
   return mapping;

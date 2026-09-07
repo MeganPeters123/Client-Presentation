@@ -78,9 +78,12 @@ function buildTradesSlide(pptx, trades) {
   const buyTotal = buys.reduce((s, t) => s + (t.value || 0), 0);
   const sellTotal = sells.reduce((s, t) => s + (t.value || 0), 0);
 
+  const sourceCount = new Set(trades.map(t => t.source).filter(Boolean)).size;
+  const sourceNote = sourceCount > 1 ? `  ·  merged from ${sourceCount} files` : "";
+
   const slide = pptx.addSlide();
   slide.addText("Trade Records", { x: 0.5, y: 0.35, w: 8, h: 0.5, fontSize: 22, bold: true, color: PPTX_INK, fontFace: "Arial" });
-  slide.addText(`${trades.length} trades  ·  Buys R ${Math.round(buyTotal).toLocaleString()}  ·  Sells R ${Math.round(sellTotal).toLocaleString()}  ·  Net R ${Math.round(buyTotal - sellTotal).toLocaleString()}`,
+  slide.addText(`${trades.length} trades  ·  Buys R ${Math.round(buyTotal).toLocaleString()}  ·  Sells R ${Math.round(sellTotal).toLocaleString()}  ·  Net R ${Math.round(buyTotal - sellTotal).toLocaleString()}${sourceNote}`,
     { x: 0.5, y: 0.85, w: 12, h: 0.4, fontSize: 13, color: PPTX_MUTED, fontFace: "Arial" });
 
   const top = trades.slice().sort((a, b) => (b.value || 0) - (a.value || 0)).slice(0, 14);

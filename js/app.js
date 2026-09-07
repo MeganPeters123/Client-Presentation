@@ -1,9 +1,9 @@
 /* UI wiring: uploads, column-mapping modal, rendering, filters, theme, export. */
 "use strict";
 
-const state = { aum: [], allocation: [], trades: [] };
+const state = { aum: [], allocation: [], trades: [], tradeSources: [] }; // tradeSources: [{ fileName, count }]
 let pendingUpload = null; // { kind, headers, rows }
-let tradeFilter = { type: "all", search: "", from: "", to: "" };
+let tradeFilter = { type: "all", search: "", from: "", to: "", source: "all" };
 let tradeSort = { key: "date", dir: "desc" };
 
 /* ---------- theme ---------- */
@@ -125,17 +125,64 @@ document.getElementById("mapConfirm").addEventListener("click", () => {
     showToast("None of the rows could be read with that mapping — check the file and try again.");
     return;
   }
-  state[kind] = records;
   document.getElementById("mapModal").style.display = "none";
 
-  const slot = document.getElementById("slot-" + kind);
-  slot.classList.add("loaded");
-  document.getElementById("status-" + kind).textContent = `${records.length} rows loaded`;
+  if (kind === "trades") {
+    addTradeSource(pendingUpload.fileName, records);
+  } else {
+    state[kind] = records;
+    const slot = document.getElementById("slot-" + kind);
+    slot.classList.add("loaded");
+    document.getElementById("status-" + kind).textContent = `${records.length} rows loaded`;
+  }
 
   showToast(`${KIND_LABEL[kind]} loaded — ${records.length} rows`);
   pendingUpload = null;
   renderAll();
 });
+
+/* ---------- trade sources (multi-file merge) ---------- */
+function addTradeSource(fileName, records) {
+  records.forEach(r => { r.source = fileName; });
+  // re-uploading the same file name replaces just that file's rows
+  state.trades = state.trades.filter(t => t.source !== fileName).concat(records);
+  const existing = state.tradeSources.find(s => s.fileName === fileName);
+  if (existing) existing.count = records.length;
+  else state.tradeSources.push({ fileName, count: records.length });
+  renderTradeSourceChips();
+}
+
+function removeTradeSource(fileName) {
+  state.trades = state.trades.filter(t => t.source !== fileName);
+  state.tradeSources = state.tradeSources.filter(s => s.fileName !== fileName);
+  if (tradeFilter.source === fileName) tradeFilter.source = "all";
+  renderTradeSourceChips();
+  renderAll();
+}
+
+function renderTradeSourceChips() {
+  const slot = document.getElementById("slot-trades");
+  const list = document.getElementById("tradeSourceList");
+  const status = document.getElementById("status-trades");
+  if (!state.tradeSources.length) {
+    slot.classList.remove("loaded");
+    status.textContent = "";
+    list.innerHTML = "";
+    return;
+  }
+  slot.classList.add("loaded");
+  const total = state.trades.length;
+  status.textContent = `${state.tradeSources.length} file${state.tradeSources.length > 1 ? "s" : ""} · ${total} rows loaded`;
+  list.innerHTML = state.tradeSources.map(s => `
+    <div class="source-chip">
+      <span>${s.fileName}</span>
+      <span class="n">${s.count}</span>
+      <span class="rm" data-file="${s.fileName.replace(/"/g, "&quot;")}" title="Remove this file">✕</span>
+    </div>`).join("");
+  list.querySelectorAll(".rm").forEach(el => {
+    el.addEventListener("click", ev => { ev.stopPropagation(); removeTradeSource(el.dataset.file); });
+  });
+}
 
 /* ---------- allocation helpers ---------- */
 function computeAllocationSegments(records) {
@@ -236,12 +283,25 @@ document.getElementById("tradeTypeSeg").addEventListener("click", e => {
 document.getElementById("tradeSearch").addEventListener("input", e => { tradeFilter.search = e.target.value.toLowerCase(); renderTradesTable(); });
 document.getElementById("tradeFrom").addEventListener("change", e => { tradeFilter.from = e.target.value; renderTradesTable(); });
 document.getElementById("tradeTo").addEventListener("change", e => { tradeFilter.to = e.target.value; renderTradesTable(); });
+document.getElementById("tradeSourceFilter").addEventListener("change", e => { tradeFilter.source = e.target.value; renderTradesTable(); });
+
+function renderTradeSourceFilterOptions() {
+  const sel = document.getElementById("tradeSourceFilter");
+  if (state.tradeSources.length < 2) { sel.style.display = "none"; tradeFilter.source = "all"; return; }
+  sel.style.display = "";
+  const current = tradeFilter.source;
+  sel.innerHTML = `<option value="all">All sources</option>` +
+    state.tradeSources.map(s => `<option value="${s.fileName.replace(/"/g, "&quot;")}">${s.fileName}</option>`).join("");
+  sel.value = state.tradeSources.some(s => s.fileName === current) ? current : "all";
+  tradeFilter.source = sel.value;
+}
 
 function getTradeColumns() {
   const cols = [{ key: "date", label: "Date" }, { key: "security", label: "Security" }, { key: "type", label: "Type" }];
   if (state.trades.some(t => t.quantity != null)) cols.push({ key: "quantity", label: "Quantity" });
   if (state.trades.some(t => t.price != null)) cols.push({ key: "price", label: "Price" });
   cols.push({ key: "value", label: "Value" });
+  if (state.tradeSources.length > 1) cols.push({ key: "source", label: "Source" });
   return cols;
 }
 
@@ -249,7 +309,11 @@ function renderTradesSection() {
   const card = document.getElementById("tradesCard");
   if (!state.trades.length) { card.style.display = "none"; return; }
   card.style.display = "block";
+  document.getElementById("tradesSubtitle").textContent = state.tradeSources.length > 1
+    ? `All buy and sell activity — merged from ${state.tradeSources.length} files`
+    : "All buy and sell activity";
 
+  renderTradeSourceFilterOptions();
   const thead = document.querySelector("#tradesTable thead");
   const cols = getTradeColumns();
   thead.innerHTML = "<tr>" + cols.map(c =>
@@ -275,6 +339,7 @@ function renderTradesTable() {
   if (tradeFilter.search) rows = rows.filter(t => t.security.toLowerCase().includes(tradeFilter.search));
   if (tradeFilter.from) { const from = new Date(tradeFilter.from); rows = rows.filter(t => t.date >= from); }
   if (tradeFilter.to) { const to = new Date(tradeFilter.to); to.setHours(23, 59, 59, 999); rows = rows.filter(t => t.date <= to); }
+  if (tradeFilter.source && tradeFilter.source !== "all") rows = rows.filter(t => t.source === tradeFilter.source);
 
   rows.sort((a, b) => {
     let av = a[tradeSort.key], bv = b[tradeSort.key];
@@ -293,6 +358,7 @@ function renderTradesTable() {
       if (c.key === "date") return `<td>${t.date ? t.date.toLocaleDateString() : ""}</td>`;
       if (c.key === "type") return `<td><span class="chip ${t.type.toLowerCase()}">${t.type}</span></td>`;
       if (c.key === "security") return `<td>${t.security}</td>`;
+      if (c.key === "source") return `<td>${t.source || ""}</td>`;
       return `<td class="num">${t[c.key] != null ? fmtCurrency(t[c.key]) : ""}</td>`;
     }).join("") + "</tr>";
   }).join("");
