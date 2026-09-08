@@ -48,10 +48,35 @@ function buildAumSlide(pptx, records) {
   return slide;
 }
 
-function buildAllocationSlide(pptx, segments) {
+function buildFundsSlide(pptx, snapshots) {
+  const total = snapshots.reduce((s, snap) => s + snap.total, 0);
+  const sorted = snapshots.slice().sort((a, b) => b.total - a.total);
+
+  const slide = pptx.addSlide();
+  slide.addText("Funds Under Management", { x: 0.5, y: 0.35, w: 10, h: 0.5, fontSize: 22, bold: true, color: PPTX_INK, fontFace: "Arial" });
+  slide.addText(`${snapshots.length} funds  ·  Total R ${Math.round(total).toLocaleString()}`,
+    { x: 0.5, y: 0.85, w: 10, h: 0.4, fontSize: 13, color: PPTX_MUTED, fontFace: "Arial" });
+
+  const rows = [[
+    { text: "Fund", options: { bold: true, color: "FFFFFF", fill: { color: PPTX_ACCENT } } },
+    { text: "AUM", options: { bold: true, color: "FFFFFF", fill: { color: PPTX_ACCENT }, align: "right" } },
+    { text: "% of Total", options: { bold: true, color: "FFFFFF", fill: { color: PPTX_ACCENT }, align: "right" } }
+  ]];
+  sorted.forEach(s => {
+    rows.push([
+      { text: s.fund },
+      { text: "R " + Math.round(s.total).toLocaleString(), options: { align: "right" } },
+      { text: (total ? (s.total / total * 100) : 0).toFixed(1) + "%", options: { align: "right" } }
+    ]);
+  });
+  slide.addTable(rows, { x: 0.5, y: 1.4, w: 12.3, h: 5.5, fontSize: 12, fontFace: "Arial", border: { type: "solid", color: "E1E0D9", pt: 0.5 }, autoPage: false });
+  return slide;
+}
+
+function buildAllocationSlide(pptx, segments, sourceLabel) {
   const slide = pptx.addSlide();
   slide.addText("Asset Allocation", { x: 0.5, y: 0.35, w: 8, h: 0.5, fontSize: 22, bold: true, color: PPTX_INK, fontFace: "Arial" });
-  slide.addText("% of total fund value by asset class", { x: 0.5, y: 0.85, w: 10, h: 0.4, fontSize: 13, color: PPTX_MUTED, fontFace: "Arial" });
+  slide.addText(`% of total fund value by asset class — ${sourceLabel}`, { x: 0.5, y: 0.85, w: 10, h: 0.4, fontSize: 13, color: PPTX_MUTED, fontFace: "Arial" });
 
   const colors = segments.map((s, i) => pptxColorForCategory(s.category, i));
   slide.addChart(pptx.ChartType.pie, [{ name: "Allocation", labels: segments.map(s => s.category), values: segments.map(s => s.value) }], {
@@ -113,7 +138,9 @@ async function exportPptx(state, title, subtitle) {
   const asOf = state.aum.length ? "As of " + state.aum.slice().sort((a, b) => b.date - a.date)[0].date.toLocaleDateString() : "";
   buildTitleSlide(pptx, title, subtitle, asOf);
   if (state.aum.length) buildAumSlide(pptx, state.aum);
-  if (state.allocation.length) buildAllocationSlide(pptx, computeAllocationSegments(state.allocation));
+  if (state.holdingsSnapshots.length) buildFundsSlide(pptx, state.holdingsSnapshots);
+  const { segments: activeSegments, label: allocationLabel } = getActiveAllocationSegments();
+  if (activeSegments.length) buildAllocationSlide(pptx, activeSegments, allocationLabel);
   if (state.trades.length) buildTradesSlide(pptx, state.trades);
 
   const fileName = (title || "AUM-Dashboard").replace(/[^a-z0-9]+/gi, "-") + ".pptx";

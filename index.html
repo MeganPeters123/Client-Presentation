@@ -28,7 +28,7 @@
   <div class="data-panel" id="dataPanel">
     <div class="data-panel-head" id="dataPanelHead">
       <h2>Data</h2>
-      <span class="hint" id="dataPanelHint">Upload AUM history, asset allocation and trade records to build the dashboard — files are read in your browser only, nothing is uploaded anywhere.</span>
+      <span class="hint" id="dataPanelHint">Upload AUM history, asset allocation, trade records and fund holdings to build the dashboard — files are read in your browser only, nothing is uploaded anywhere.</span>
       <svg class="chev" viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
     <div class="data-panel-body">
@@ -55,6 +55,14 @@
           <div class="source-list" id="tradeSourceList"></div>
           <input type="file" id="file-trades" accept=".csv,.xlsx,.xls">
         </div>
+        <div class="upload-slot" id="slot-holdings" data-kind="holdings">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <h3>Fund Holdings</h3>
+          <p>Position-level valuation exports, one file per fund — format is auto-detected, no mapping needed. Add as many funds as you have.</p>
+          <div class="status" id="status-holdings"></div>
+          <div class="source-list" id="holdingsSourceList"></div>
+          <input type="file" id="file-holdings" accept=".csv,.xlsx,.xls,.htm,.html">
+        </div>
       </div>
       <div class="sample-row">
         <a href="sample-data/aum-history.csv" download>Sample AUM file</a> &nbsp;·&nbsp;
@@ -62,7 +70,10 @@
         <a href="sample-data/trade-records.csv" download>Sample trades file</a> &nbsp;·&nbsp;
         <a href="sample-data/trades-apex-format.csv" download>Apex-format sample</a> &nbsp;·&nbsp;
         <a href="sample-data/trades-prescient-format.csv" download>Prescient-format sample</a> &nbsp;·&nbsp;
-        <a href="sample-data/transactions-ledger-format.csv" download>Mixed-ledger sample (with row filtering)</a>
+        <a href="sample-data/transactions-ledger-format.csv" download>Mixed-ledger sample (with row filtering)</a> &nbsp;·&nbsp;
+        <a href="sample-data/holdings-custodian-format.html" download>Custodian-HTML holdings sample</a> &nbsp;·&nbsp;
+        <a href="sample-data/holdings-flat-format.csv" download>Flat-CSV holdings sample</a> &nbsp;·&nbsp;
+        <a href="sample-data/holdings-ipd-format.xls" download>IPD-style holdings sample</a>
       </div>
     </div>
   </div>
@@ -77,6 +88,22 @@
       </div>
     </div>
     <div class="chart-wrap"><canvas id="aumChart"></canvas></div>
+  </div>
+
+  <div id="fundsCard" class="card" style="display:none;">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Funds Under Management</div>
+        <div class="card-subtitle" id="fundsSubtitle">Consolidated across every fund holdings file loaded</div>
+      </div>
+      <select id="fundSelector"></select>
+    </div>
+    <div class="table-scroll">
+      <table class="data-table" id="fundsTable">
+        <thead><tr><th>Fund</th><th style="text-align:right;">AUM</th><th style="text-align:right;">% of Total</th><th>As of</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </div>
 
   <div id="allocationCard" class="card" style="display:none;">
@@ -189,6 +216,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <script src="js/data.js"></script>
+<script src="js/holdings.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/pptx-export.js"></script>
 <script src="js/app.js"></script>

@@ -1,11 +1,12 @@
 /* UI wiring: uploads, column-mapping modal, rendering, filters, theme, export. */
 "use strict";
 
-const state = { aum: [], allocation: [], trades: [], tradeSources: [] }; // tradeSources: [{ fileName, count }]
+const state = { aum: [], allocation: [], trades: [], tradeSources: [], holdingsSnapshots: [] }; // tradeSources: [{ fileName, count }]; holdingsSnapshots: [{ fund, fundCode, asOf, total, segments, source, format }]
 let pendingUpload = null; // { kind, headers, rows }
 let pendingExcludedValues = new Set(); // values checked "exclude" in the row-filter panel
 let tradeFilter = { type: "all", search: "", from: "", to: "", source: "all" };
 let tradeSort = { key: "date", dir: "desc" };
+let selectedFund = "all"; // "all" (consolidated) or a fund name from state.holdingsSnapshots
 
 /* ---------- theme ---------- */
 (function initTheme() {
@@ -39,7 +40,7 @@ function showToast(msg) {
 }
 
 /* ---------- upload wiring ---------- */
-["aum", "allocation", "trades"].forEach(kind => {
+["aum", "allocation", "trades", "holdings"].forEach(kind => {
   const slot = document.getElementById("slot-" + kind);
   const input = document.getElementById("file-" + kind);
   slot.addEventListener("click", () => input.click());
@@ -53,6 +54,7 @@ function showToast(msg) {
 });
 
 async function handleUpload(kind, file) {
+  if (kind === "holdings") { await handleHoldingsUpload(file); return; }
   try {
     const { headers, rows } = await parseFile(file);
     pendingUpload = { kind, headers, rows, fileName: file.name };
@@ -61,6 +63,54 @@ async function handleUpload(kind, file) {
     console.error(err);
     showToast("Could not read that file: " + err.message);
   }
+}
+
+/* ---------- fund holdings (auto-detected format, no mapping step) ---------- */
+async function handleHoldingsUpload(file) {
+  try {
+    const snapshots = await parseHoldingsFile(file);
+    snapshots.forEach(snap => {
+      state.holdingsSnapshots = state.holdingsSnapshots.filter(s => s.fund !== snap.fund);
+      state.holdingsSnapshots.push(snap);
+    });
+    renderHoldingsSourceList();
+    const names = snapshots.map(s => s.fund).join(", ");
+    showToast(`Fund Holdings loaded — ${names} (${snapshots[0].format})`);
+    renderAll();
+  } catch (err) {
+    console.error(err);
+    showToast("Could not read that file: " + err.message);
+  }
+}
+
+function removeFundSnapshot(fundName) {
+  state.holdingsSnapshots = state.holdingsSnapshots.filter(s => s.fund !== fundName);
+  if (selectedFund === fundName) selectedFund = "all";
+  renderHoldingsSourceList();
+  renderAll();
+}
+
+function renderHoldingsSourceList() {
+  const slot = document.getElementById("slot-holdings");
+  const list = document.getElementById("holdingsSourceList");
+  const status = document.getElementById("status-holdings");
+  if (!state.holdingsSnapshots.length) {
+    slot.classList.remove("loaded");
+    status.textContent = "";
+    list.innerHTML = "";
+    return;
+  }
+  slot.classList.add("loaded");
+  status.textContent = `${state.holdingsSnapshots.length} fund${state.holdingsSnapshots.length > 1 ? "s" : ""} loaded`;
+  list.innerHTML = state.holdingsSnapshots.map(s => `
+    <div class="source-chip">
+      <span>${s.fund}</span>
+      <span class="n">${fmtCurrency(s.total)}</span>
+      <span class="rm" data-fund="${s.fund.replace(/"/g, "&quot;")}" title="Remove this fund">✕</span>
+    </div>`).join("");
+  list.querySelectorAll(".rm").forEach(el => {
+    el.addEventListener("click", ev => { ev.stopPropagation(); removeFundSnapshot(el.dataset.fund); });
+  });
 }
 
 /* ---------- column mapping modal ---------- */
@@ -259,6 +309,35 @@ function computeAllocationSegments(records) {
     .sort((a, b) => b.value - a.value);
 }
 
+/* ---------- fund holdings: consolidation + the single source of truth for "active" allocation ---------- */
+function computeConsolidatedFundSegments() {
+  const byCategory = new Map();
+  state.holdingsSnapshots.forEach(snap => {
+    snap.segments.forEach(seg => byCategory.set(seg.category, (byCategory.get(seg.category) || 0) + seg.value));
+  });
+  const total = [...byCategory.values()].reduce((s, v) => s + v, 0);
+  return [...byCategory.entries()]
+    .map(([category, value]) => ({ category, value, pct: total ? (value / total) * 100 : 0 }))
+    .sort((a, b) => b.value - a.value);
+}
+
+/** Segments feeding both the Asset Allocation card and the PPTX export — Fund Holdings takes
+ *  priority over the manually-uploaded Asset Allocation file whenever any holdings are loaded. */
+function getActiveAllocationSegments() {
+  if (state.holdingsSnapshots.length) {
+    if (selectedFund === "all") {
+      return { segments: computeConsolidatedFundSegments(), label: `Consolidated across ${state.holdingsSnapshots.length} fund${state.holdingsSnapshots.length > 1 ? "s" : ""}` };
+    }
+    const snap = state.holdingsSnapshots.find(s => s.fund === selectedFund);
+    if (snap) {
+      const total = snap.total;
+      const segments = snap.segments.map(s => ({ category: s.category, value: s.value, pct: total ? (s.value / total) * 100 : 0 })).sort((a, b) => b.value - a.value);
+      return { segments, label: snap.fund };
+    }
+  }
+  return { segments: computeAllocationSegments(state.allocation), label: "Uploaded allocation file" };
+}
+
 /* ---------- KPI row ---------- */
 function renderKpis() {
   const row = document.getElementById("kpiRow");
@@ -282,12 +361,20 @@ function renderKpis() {
     });
   }
 
-  if (state.allocation.length) {
-    const segments = computeAllocationSegments(state.allocation);
-    const top = segments[0];
+  if (state.holdingsSnapshots.length) {
+    const total = state.holdingsSnapshots.reduce((s, snap) => s + snap.total, 0);
+    tiles.push({
+      label: "Total AUM (Funds)", value: "R " + fmtCurrency(total),
+      delta: `across ${state.holdingsSnapshots.length} fund${state.holdingsSnapshots.length > 1 ? "s" : ""}`, deltaClass: ""
+    });
+  }
+
+  const { segments: activeSegments, label: activeLabel } = getActiveAllocationSegments();
+  if (activeSegments.length) {
+    const top = activeSegments[0];
     tiles.push({
       label: "Largest Allocation", value: top.category,
-      delta: top.pct.toFixed(1) + "% of fund", deltaClass: ""
+      delta: top.pct.toFixed(1) + "% · " + activeLabel, deltaClass: ""
     });
   }
 
@@ -322,12 +409,50 @@ function renderAumSection() {
   renderAumChart(state.aum);
 }
 
+/* ---------- Funds Under Management (fund holdings) ---------- */
+document.getElementById("fundSelector").addEventListener("change", e => {
+  selectedFund = e.target.value;
+  renderAllocationSection();
+});
+
+function renderFundsSection() {
+  const card = document.getElementById("fundsCard");
+  if (!state.holdingsSnapshots.length) { card.style.display = "none"; return; }
+  card.style.display = "block";
+
+  const total = state.holdingsSnapshots.reduce((s, snap) => s + snap.total, 0);
+  const asOfDates = state.holdingsSnapshots.map(s => s.asOf).filter(Boolean);
+  const asOfLabel = asOfDates.length ? new Set(asOfDates.map(d => d.toDateString())).size === 1
+    ? "as of " + asOfDates[0].toLocaleDateString()
+    : "as-of dates vary across funds — check before presenting"
+    : "";
+  document.getElementById("fundsSubtitle").textContent =
+    `Consolidated across ${state.holdingsSnapshots.length} fund${state.holdingsSnapshots.length > 1 ? "s" : ""} — R ${fmtCurrency(total)} ${asOfLabel}`;
+
+  const sel = document.getElementById("fundSelector");
+  const sorted = state.holdingsSnapshots.slice().sort((a, b) => b.total - a.total);
+  sel.innerHTML = `<option value="all">All Funds (Consolidated)</option>` +
+    sorted.map(s => `<option value="${s.fund.replace(/"/g, "&quot;")}">${s.fund}</option>`).join("");
+  sel.value = state.holdingsSnapshots.some(s => s.fund === selectedFund) ? selectedFund : "all";
+  selectedFund = sel.value;
+
+  const tbody = document.querySelector("#fundsTable tbody");
+  tbody.innerHTML = sorted.map(s => `
+    <tr>
+      <td>${s.fund}</td>
+      <td class="num">${fmtCurrency(s.total)}</td>
+      <td class="num">${total ? (s.total / total * 100).toFixed(1) : "0.0"}%</td>
+      <td>${s.asOf ? s.asOf.toLocaleDateString() : "—"}</td>
+    </tr>`).join("");
+}
+
 /* ---------- Allocation section ---------- */
 function renderAllocationSection() {
   const card = document.getElementById("allocationCard");
-  if (!state.allocation.length) { card.style.display = "none"; return; }
+  const { segments, label } = getActiveAllocationSegments();
+  if (!segments.length) { card.style.display = "none"; return; }
   card.style.display = "block";
-  const segments = computeAllocationSegments(state.allocation);
+  document.getElementById("allocationSubtitle").textContent = `% of total fund value by asset class — ${label}`;
   const tbody = document.querySelector("#allocationTable tbody");
   tbody.innerHTML = segments.map((s, i) => `
     <tr>
@@ -444,9 +569,10 @@ function thead_sync_indicators() {
 function renderAll() {
   renderKpis();
   renderAumSection();
+  renderFundsSection();
   renderAllocationSection();
   renderTradesSection();
-  const anyData = state.aum.length || state.allocation.length || state.trades.length;
+  const anyData = state.aum.length || state.allocation.length || state.trades.length || state.holdingsSnapshots.length;
   document.getElementById("emptyHint").style.display = anyData ? "none" : "block";
   document.getElementById("exportBtn").disabled = !anyData;
 }
