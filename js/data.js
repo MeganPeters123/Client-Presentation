@@ -13,7 +13,7 @@ const FIELD_DEFS = {
   trades: [
     { key: "date", label: "Date", type: "date", synonyms: ["date", "tradedate", "dealdate"] },
     { key: "security", label: "Security", type: "text", synonyms: ["securitydescription", "securityname", "issuename", "instrumentcode", "instrumentname", "security", "instrument", "ticker", "stock", "counter"] },
-    { key: "type", label: "Buy / Sell", type: "text", synonyms: ["transactiontype", "trancode", "trantype", "buysell", "type", "side", "action", "direction"] },
+    { key: "type", label: "Buy / Sell", type: "text", synonyms: ["transactiontype", "tradetype", "dealtype", "trancode", "trantype", "buysell", "side", "action", "direction", "transactiondescription", "description"] },
     { key: "quantity", label: "Quantity", type: "number", optional: true, synonyms: ["quantity", "qty", "units", "shares", "volume"] },
     { key: "price", label: "Price", type: "number", optional: true, synonyms: ["price", "unitprice", "executionprice", "dealprice", "dealrate"] },
     { key: "value", label: "Value", type: "number", synonyms: ["value", "amount", "consideration", "tradevalue", "marketvalue"] }

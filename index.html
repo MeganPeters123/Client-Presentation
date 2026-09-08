@@ -61,7 +61,8 @@
         <a href="sample-data/asset-allocation.csv" download>Sample allocation file</a> &nbsp;·&nbsp;
         <a href="sample-data/trade-records.csv" download>Sample trades file</a> &nbsp;·&nbsp;
         <a href="sample-data/trades-apex-format.csv" download>Apex-format sample</a> &nbsp;·&nbsp;
-        <a href="sample-data/trades-prescient-format.csv" download>Prescient-format sample</a>
+        <a href="sample-data/trades-prescient-format.csv" download>Prescient-format sample</a> &nbsp;·&nbsp;
+        <a href="sample-data/transactions-ledger-format.csv" download>Mixed-ledger sample (with row filtering)</a>
       </div>
     </div>
   </div>
@@ -140,6 +141,21 @@
     <h2 id="mapTitle">Match your columns</h2>
     <p class="hint" id="mapHint">We guessed the mapping below — check it and confirm.</p>
     <div id="mapFields"></div>
+
+    <div class="filter-section" id="mapFilterSection" style="display:none;">
+      <div class="filter-toggle" id="mapFilterToggle">
+        <svg viewBox="0 0 24 24" fill="none" width="13" height="13"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Exclude some rows (optional) — e.g. non-trade entries mixed into a ledger export
+      </div>
+      <div class="filter-body" id="mapFilterBody" style="display:none;">
+        <div class="field">
+          <label>Column to filter on</label>
+          <select id="mapFilterColumn"><option value="">— none —</option></select>
+        </div>
+        <div id="mapFilterValues" class="filter-values"></div>
+      </div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn" id="mapCancel">Cancel</button>
       <button class="btn primary" id="mapConfirm">Use this file</button>

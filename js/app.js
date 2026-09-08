@@ -3,6 +3,7 @@
 
 const state = { aum: [], allocation: [], trades: [], tradeSources: [] }; // tradeSources: [{ fileName, count }]
 let pendingUpload = null; // { kind, headers, rows }
+let pendingExcludedValues = new Set(); // values checked "exclude" in the row-filter panel
 let tradeFilter = { type: "all", search: "", from: "", to: "", source: "all" };
 let tradeSort = { key: "date", dir: "desc" };
 
@@ -98,7 +99,59 @@ function openMappingModal(kind, headers) {
     grid.appendChild(field);
   });
   wrap.appendChild(grid);
+  setupFilterSection(headers);
   document.getElementById("mapModal").style.display = "flex";
+}
+
+/* ---------- row-exclusion filter (e.g. drop non-trade rows from a mixed ledger export) ---------- */
+function setupFilterSection(headers) {
+  pendingExcludedValues = new Set();
+  const section = document.getElementById("mapFilterSection");
+  const toggle = document.getElementById("mapFilterToggle");
+  const body = document.getElementById("mapFilterBody");
+  const colSelect = document.getElementById("mapFilterColumn");
+  const valuesWrap = document.getElementById("mapFilterValues");
+
+  section.style.display = "block";
+  body.style.display = "none";
+  toggle.classList.remove("open");
+  colSelect.innerHTML = '<option value="">— none —</option>' +
+    headers.map(h => `<option value="${h.replace(/"/g, "&quot;")}">${h}</option>`).join("");
+  valuesWrap.innerHTML = "";
+
+  toggle.onclick = () => {
+    const open = body.style.display !== "none";
+    body.style.display = open ? "none" : "block";
+    toggle.classList.toggle("open", !open);
+  };
+
+  colSelect.onchange = () => {
+    pendingExcludedValues = new Set();
+    renderFilterValues(colSelect.value);
+  };
+}
+
+function renderFilterValues(column) {
+  const valuesWrap = document.getElementById("mapFilterValues");
+  if (!column || !pendingUpload) { valuesWrap.innerHTML = ""; return; }
+  const counts = new Map();
+  for (const row of pendingUpload.rows) {
+    const raw = row[column];
+    const val = raw == null ? "(blank)" : String(raw).trim() || "(blank)";
+    counts.set(val, (counts.get(val) || 0) + 1);
+  }
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  valuesWrap.innerHTML = sorted.map(([val, n]) => `
+    <div class="filter-value-row">
+      <input type="checkbox" data-val="${val.replace(/"/g, "&quot;")}">
+      <label>${val}<span class="n">${n}</span></label>
+    </div>`).join("") + `<div class="filter-hint" style="padding:6px 10px 8px;">Tick the values to exclude — everything unticked stays in.</div>`;
+  valuesWrap.querySelectorAll("input[type=checkbox]").forEach(cb => {
+    cb.addEventListener("change", () => {
+      if (cb.checked) pendingExcludedValues.add(cb.dataset.val);
+      else pendingExcludedValues.delete(cb.dataset.val);
+    });
+  });
 }
 
 document.getElementById("mapCancel").addEventListener("click", () => {
@@ -120,7 +173,21 @@ document.getElementById("mapConfirm").addEventListener("click", () => {
     return;
   }
 
-  const records = applyMapping(kind, rows, mapping);
+  const filterColumn = document.getElementById("mapFilterColumn").value;
+  let sourceRows = rows;
+  if (filterColumn && pendingExcludedValues.size) {
+    sourceRows = rows.filter(row => {
+      const raw = row[filterColumn];
+      const val = raw == null ? "(blank)" : String(raw).trim() || "(blank)";
+      return !pendingExcludedValues.has(val);
+    });
+    if (!sourceRows.length) {
+      showToast("That excludes every row — untick at least one value.");
+      return;
+    }
+  }
+
+  const records = applyMapping(kind, sourceRows, mapping);
   if (!records.length) {
     showToast("None of the rows could be read with that mapping — check the file and try again.");
     return;
