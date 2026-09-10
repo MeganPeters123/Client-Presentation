@@ -87,7 +87,36 @@ function renderAllocationChart(segments) {
   });
 }
 
+let fundTrendChartInstance = null;
+
+/** points: [{ label, value }] sorted oldest -> newest */
+function renderFundTrendChart(points) {
+  const ctx = document.getElementById("fundTrendChart").getContext("2d");
+  if (fundTrendChartInstance) fundTrendChartInstance.destroy();
+  const ink2 = cssVar("--ink-2"), grid = cssVar("--grid"), accent = cssVar("--accent"), accentWash = cssVar("--accent-wash");
+  fundTrendChartInstance = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: points.map(p => p.label),
+      datasets: [{
+        label: "AUM", data: points.map(p => p.value),
+        borderColor: accent, backgroundColor: accentWash, fill: true, tension: 0.25,
+        pointRadius: 3, pointHoverRadius: 5, borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => "R " + Math.round(c.parsed.y).toLocaleString() } } },
+      scales: {
+        x: { ticks: { color: ink2 }, grid: { color: "transparent" } },
+        y: { ticks: { color: ink2, callback: v => fmtCurrency(v) }, grid: { color: grid } }
+      }
+    }
+  });
+}
+
 function destroyCharts() {
   if (aumChartInstance) { aumChartInstance.destroy(); aumChartInstance = null; }
   if (allocationChartInstance) { allocationChartInstance.destroy(); allocationChartInstance = null; }
+  if (fundTrendChartInstance) { fundTrendChartInstance.destroy(); fundTrendChartInstance = null; }
 }

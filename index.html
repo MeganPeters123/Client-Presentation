@@ -75,6 +75,13 @@
         <a href="sample-data/holdings-flat-format.csv" download>Flat-CSV holdings sample</a> &nbsp;·&nbsp;
         <a href="sample-data/holdings-ipd-format.xls" download>IPD-style holdings sample</a>
       </div>
+      <div class="history-row">
+        <span class="card-subtitle" id="historySummary">No history saved yet</span>
+        <div class="spacer"></div>
+        <button class="btn sm" id="exportHistoryBtn">Export history (.json)</button>
+        <button class="btn sm" id="importHistoryBtn">Import history</button>
+        <input type="file" id="importHistoryFile" accept=".json" style="display:none;">
+      </div>
     </div>
   </div>
 
@@ -96,13 +103,48 @@
         <div class="card-title">Funds Under Management</div>
         <div class="card-subtitle" id="fundsSubtitle">Consolidated across every fund holdings file loaded</div>
       </div>
-      <select id="fundSelector"></select>
+      <div class="funds-controls">
+        <select id="fundSelector"></select>
+        <select id="periodSelector"></select>
+        <button class="btn sm" id="saveHistoryBtn">
+          <svg viewBox="0 0 24 24" fill="none" width="13" height="13"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M17 21v-8H7v8M7 3v5h8" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          Save this period
+        </button>
+      </div>
     </div>
     <div class="table-scroll">
       <table class="data-table" id="fundsTable">
         <thead><tr><th>Fund</th><th style="text-align:right;">AUM</th><th style="text-align:right;">% of Total</th><th>As of</th></tr></thead>
         <tbody></tbody>
       </table>
+    </div>
+    <div id="fundTrendWrap" class="chart-wrap" style="display:none; margin-top:18px; height:220px;">
+      <canvas id="fundTrendChart"></canvas>
+    </div>
+  </div>
+
+  <div id="compareCard" class="card" style="display:none;">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Compare Periods</div>
+        <div class="card-subtitle">See what changed between two saved months</div>
+      </div>
+      <div class="funds-controls">
+        <select id="compareFundSelector"></select>
+        <select id="comparePeriodA"></select>
+        <span class="card-subtitle">vs</span>
+        <select id="comparePeriodB"></select>
+      </div>
+    </div>
+    <div id="compareEmpty" class="empty-hint" style="padding:24px 20px;">Pick two saved periods for the same fund (or "All Funds") to compare.</div>
+    <div id="compareBody" style="display:none;">
+      <div class="kpi-row" id="compareKpiRow" style="margin-bottom:16px;"></div>
+      <div class="table-scroll">
+        <table class="data-table" id="compareTable">
+          <thead><tr><th>Category</th><th style="text-align:right;" id="compareColA">A</th><th style="text-align:right;" id="compareColB">B</th><th style="text-align:right;">Change</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -217,6 +259,7 @@
 <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <script src="js/data.js"></script>
 <script src="js/holdings.js"></script>
+<script src="js/history.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/pptx-export.js"></script>
 <script src="js/app.js"></script>

@@ -95,6 +95,12 @@ h1,h2,h3{ margin:0; }
 .sample-row a{ color:var(--accent); font-size:12px; text-decoration:none; font-weight:600; }
 .sample-row a:hover{ text-decoration:underline; }
 
+.history-row{ display:flex; align-items:center; gap:10px; margin-top:14px; padding-top:14px; border-top:1px solid var(--border); }
+.funds-controls{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.funds-controls select{ padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); font-size:12.5px; }
+.delta-up{ color:var(--good); }
+.delta-down{ color:var(--bad); }
+
 /* ---- kpis ---- */
 .kpi-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }
 @media (max-width:880px){ .kpi-row{ grid-template-columns:repeat(2,1fr); } }

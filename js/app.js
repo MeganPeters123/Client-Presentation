@@ -6,7 +6,9 @@ let pendingUpload = null; // { kind, headers, rows }
 let pendingExcludedValues = new Set(); // values checked "exclude" in the row-filter panel
 let tradeFilter = { type: "all", search: "", from: "", to: "", source: "all" };
 let tradeSort = { key: "date", dir: "desc" };
-let selectedFund = "all"; // "all" (consolidated) or a fund name from state.holdingsSnapshots
+let selectedFund = "all"; // "all" (consolidated) or a fund name (live or saved-to-history)
+let selectedPeriod = "current"; // "current" (live upload) or a "YYYY-MM" saved history month
+let hasAutoSelectedPeriod = false; // so a fresh page load with saved history (but no live upload yet) opens on the latest saved month instead of an empty "Current"
 
 /* ---------- theme ---------- */
 (function initTheme() {
@@ -321,21 +323,57 @@ function computeConsolidatedFundSegments() {
     .sort((a, b) => b.value - a.value);
 }
 
+function segmentsFromSnapshot(snap) {
+  const total = snap.total;
+  return snap.segments
+    .map(s => ({ category: s.category, value: s.value, pct: total ? (s.value / total) * 100 : 0 }))
+    .sort((a, b) => b.value - a.value);
+}
+
 /** Segments feeding both the Asset Allocation card and the PPTX export — Fund Holdings takes
- *  priority over the manually-uploaded Asset Allocation file whenever any holdings are loaded. */
+ *  priority over the manually-uploaded Asset Allocation file whenever any holdings are loaded.
+ *  Respects both the fund selector and the period selector (live upload vs. a saved month). */
 function getActiveAllocationSegments() {
+  if (selectedPeriod !== "current") {
+    if (selectedFund === "all") {
+      const cons = getConsolidatedAtPeriod(selectedPeriod);
+      if (cons.total) return { segments: cons.segments, label: `Consolidated, as of ${monthLabelFromKey(selectedPeriod)}` };
+    } else {
+      const snap = getFundSnapshotAtOrBefore(selectedFund, selectedPeriod);
+      if (snap) return { segments: segmentsFromSnapshot(snap), label: `${snap.fund} — ${monthLabelFromKey(snap.period)}` };
+    }
+    return { segments: [], label: `No saved data for ${monthLabelFromKey(selectedPeriod)}` };
+  }
   if (state.holdingsSnapshots.length) {
     if (selectedFund === "all") {
       return { segments: computeConsolidatedFundSegments(), label: `Consolidated across ${state.holdingsSnapshots.length} fund${state.holdingsSnapshots.length > 1 ? "s" : ""}` };
     }
     const snap = state.holdingsSnapshots.find(s => s.fund === selectedFund);
-    if (snap) {
-      const total = snap.total;
-      const segments = snap.segments.map(s => ({ category: s.category, value: s.value, pct: total ? (s.value / total) * 100 : 0 })).sort((a, b) => b.value - a.value);
-      return { segments, label: snap.fund };
-    }
+    if (snap) return { segments: segmentsFromSnapshot(snap), label: snap.fund };
   }
   return { segments: computeAllocationSegments(state.allocation), label: "Uploaded allocation file" };
+}
+
+/** Trend points (oldest -> newest) for the currently-selected fund (or consolidated across all
+ *  funds with any saved history), from saved history plus today's live upload as the latest point. */
+function computeFundTrendPoints() {
+  const points = [];
+  if (selectedFund === "all") {
+    listAllPeriodMonths().slice().reverse().forEach(month => {
+      const cons = getConsolidatedAtPeriod(month);
+      if (cons.total) points.push({ label: monthLabelFromKey(month), value: cons.total });
+    });
+    if (state.holdingsSnapshots.length) {
+      points.push({ label: "Current", value: state.holdingsSnapshots.reduce((s, snap) => s + snap.total, 0) });
+    }
+  } else {
+    listPeriodsForFund(selectedFund).slice().reverse().forEach(snap => {
+      points.push({ label: monthLabelFromKey(snap.period), value: snap.total });
+    });
+    const live = state.holdingsSnapshots.find(s => s.fund === selectedFund);
+    if (live) points.push({ label: "Current", value: live.total });
+  }
+  return points;
 }
 
 /* ---------- KPI row ---------- */
@@ -409,40 +447,195 @@ function renderAumSection() {
   renderAumChart(state.aum);
 }
 
-/* ---------- Funds Under Management (fund holdings) ---------- */
+/* ---------- Funds Under Management (fund holdings + saved history) ---------- */
 document.getElementById("fundSelector").addEventListener("change", e => {
   selectedFund = e.target.value;
+  renderFundsSection();
   renderAllocationSection();
 });
+document.getElementById("periodSelector").addEventListener("change", e => {
+  selectedPeriod = e.target.value;
+  renderFundsSection();
+  renderAllocationSection();
+});
+document.getElementById("saveHistoryBtn").addEventListener("click", () => {
+  if (!state.holdingsSnapshots.length) { showToast("Nothing loaded to save — upload Fund Holdings first."); return; }
+  const saved = saveSnapshotsToHistory(state.holdingsSnapshots);
+  if (!saved) { showToast("Couldn't save — check the loaded files have a valid as-of date."); return; }
+  showToast(`Saved ${saved} fund${saved > 1 ? "s" : ""} to history`);
+  renderFundsSection();
+  renderHistorySummary();
+});
+
+function allKnownFunds() {
+  return [...new Set([...state.holdingsSnapshots.map(s => s.fund), ...listAllFundsInHistory()])].sort();
+}
 
 function renderFundsSection() {
   const card = document.getElementById("fundsCard");
-  if (!state.holdingsSnapshots.length) { card.style.display = "none"; return; }
+  const known = allKnownFunds();
+  if (!known.length) { card.style.display = "none"; return; }
   card.style.display = "block";
 
-  const total = state.holdingsSnapshots.reduce((s, snap) => s + snap.total, 0);
-  const asOfDates = state.holdingsSnapshots.map(s => s.asOf).filter(Boolean);
-  const asOfLabel = asOfDates.length ? new Set(asOfDates.map(d => d.toDateString())).size === 1
-    ? "as of " + asOfDates[0].toLocaleDateString()
-    : "as-of dates vary across funds — check before presenting"
-    : "";
-  document.getElementById("fundsSubtitle").textContent =
-    `Consolidated across ${state.holdingsSnapshots.length} fund${state.holdingsSnapshots.length > 1 ? "s" : ""} — R ${fmtCurrency(total)} ${asOfLabel}`;
+  const fundSel = document.getElementById("fundSelector");
+  fundSel.innerHTML = `<option value="all">All Funds (Consolidated)</option>` +
+    known.map(f => `<option value="${f.replace(/"/g, "&quot;")}">${f}</option>`).join("");
+  fundSel.value = known.includes(selectedFund) ? selectedFund : "all";
+  selectedFund = fundSel.value;
 
-  const sel = document.getElementById("fundSelector");
-  const sorted = state.holdingsSnapshots.slice().sort((a, b) => b.total - a.total);
-  sel.innerHTML = `<option value="all">All Funds (Consolidated)</option>` +
-    sorted.map(s => `<option value="${s.fund.replace(/"/g, "&quot;")}">${s.fund}</option>`).join("");
-  sel.value = state.holdingsSnapshots.some(s => s.fund === selectedFund) ? selectedFund : "all";
-  selectedFund = sel.value;
+  const periodSel = document.getElementById("periodSelector");
+  const months = selectedFund === "all" ? listAllPeriodMonths() : listPeriodsForFund(selectedFund).map(s => s.period);
+  if (!hasAutoSelectedPeriod) {
+    hasAutoSelectedPeriod = true;
+    if (!state.holdingsSnapshots.length && months.length) selectedPeriod = months[0];
+  }
+  periodSel.innerHTML = `<option value="current">Current Upload</option>` +
+    months.map(m => `<option value="${m}">${monthLabelFromKey(m)}</option>`).join("");
+  periodSel.value = months.includes(selectedPeriod) ? selectedPeriod : "current";
+  selectedPeriod = periodSel.value;
+
+  // table rows: live upload for "Current", else each fund's saved snapshot at-or-before the selected month
+  let rows, total, asOfNote;
+  if (selectedPeriod === "current") {
+    rows = state.holdingsSnapshots.map(s => ({ fund: s.fund, total: s.total, asOf: s.asOf }));
+    total = rows.reduce((s, r) => s + r.total, 0);
+    const asOfDates = rows.map(r => r.asOf).filter(Boolean);
+    asOfNote = asOfDates.length ? (new Set(asOfDates.map(d => d.toDateString())).size === 1 ? "as of " + asOfDates[0].toLocaleDateString() : "as-of dates vary across funds — check before presenting") : "";
+  } else {
+    const cons = getConsolidatedAtPeriod(selectedPeriod);
+    rows = cons.funds.map(s => ({ fund: s.fund, total: s.total, asOf: s.asOf }));
+    total = cons.total;
+    asOfNote = `saved period: ${monthLabelFromKey(selectedPeriod)}`;
+  }
+  rows.sort((a, b) => b.total - a.total);
+
+  document.getElementById("fundsSubtitle").textContent =
+    rows.length ? `${selectedPeriod === "current" ? "Consolidated across" : "As saved for"} ${rows.length} fund${rows.length > 1 ? "s" : ""} — R ${fmtCurrency(total)} ${asOfNote}` : "No data for this selection";
 
   const tbody = document.querySelector("#fundsTable tbody");
-  tbody.innerHTML = sorted.map(s => `
+  tbody.innerHTML = rows.map(s => `
     <tr>
       <td>${s.fund}</td>
       <td class="num">${fmtCurrency(s.total)}</td>
       <td class="num">${total ? (s.total / total * 100).toFixed(1) : "0.0"}%</td>
       <td>${s.asOf ? s.asOf.toLocaleDateString() : "—"}</td>
+    </tr>`).join("");
+
+  const trendPoints = computeFundTrendPoints();
+  const trendWrap = document.getElementById("fundTrendWrap");
+  if (trendPoints.length >= 2) {
+    trendWrap.style.display = "block";
+    renderFundTrendChart(trendPoints);
+  } else {
+    trendWrap.style.display = "none";
+  }
+
+  renderCompareSection();
+}
+
+function renderHistorySummary() {
+  const el = document.getElementById("historySummary");
+  const funds = listAllFundsInHistory();
+  const months = listAllPeriodMonths();
+  el.textContent = funds.length
+    ? `${Object.keys(historyStore.periods).length} saved snapshot${Object.keys(historyStore.periods).length > 1 ? "s" : ""} · ${funds.length} fund${funds.length > 1 ? "s" : ""} · ${months.length} month${months.length > 1 ? "s" : ""} (${months.length ? monthLabelFromKey(months[months.length - 1]) + " – " + monthLabelFromKey(months[0]) : ""})`
+    : "No history saved yet";
+}
+
+document.getElementById("exportHistoryBtn").addEventListener("click", () => {
+  if (!Object.keys(historyStore.periods).length) { showToast("No saved history to export yet."); return; }
+  exportHistoryToFile();
+});
+document.getElementById("importHistoryBtn").addEventListener("click", () => {
+  document.getElementById("importHistoryFile").click();
+});
+document.getElementById("importHistoryFile").addEventListener("change", async e => {
+  if (!e.target.files.length) return;
+  try {
+    const n = await importHistoryFromFile(e.target.files[0]);
+    showToast(`Imported ${n} saved snapshot${n === 1 ? "" : "s"}`);
+    renderHistorySummary();
+    renderFundsSection();
+  } catch (err) {
+    console.error(err);
+    showToast("Could not import that file: " + err.message);
+  }
+  e.target.value = "";
+});
+
+/* ---------- Compare Periods ---------- */
+["compareFundSelector", "comparePeriodA", "comparePeriodB"].forEach(id => {
+  document.getElementById(id).addEventListener("change", renderCompareSection);
+});
+
+/** Pure data computation for the current Compare Periods selection — used by both the on-screen
+ *  render and the PPTX export, so the two never disagree. Returns null if not fully configured. */
+function computeCompareData() {
+  const fund = document.getElementById("compareFundSelector").value || "all";
+  const periodA = document.getElementById("comparePeriodA").value;
+  const periodB = document.getElementById("comparePeriodB").value;
+  if (!periodA || !periodB || periodA === periodB) return null;
+
+  const snapA = fund === "all" ? getConsolidatedAtPeriod(periodA) : getFundSnapshotAtOrBefore(fund, periodA);
+  const snapB = fund === "all" ? getConsolidatedAtPeriod(periodB) : getFundSnapshotAtOrBefore(fund, periodB);
+  if (!snapA || !snapB || !snapA.total || !snapB.total) return null;
+
+  const labelA = monthLabelFromKey(periodA), labelB = monthLabelFromKey(periodB);
+  const categories = [...new Set([...snapA.segments.map(s => s.category), ...snapB.segments.map(s => s.category)])];
+  const valA = cat => (snapA.segments.find(s => s.category === cat) || {}).value || 0;
+  const valB = cat => (snapB.segments.find(s => s.category === cat) || {}).value || 0;
+  const rows = categories
+    .map(cat => ({ category: cat, a: valA(cat), b: valB(cat), delta: valB(cat) - valA(cat) }))
+    .sort((a, b) => Math.max(b.a, b.b) - Math.max(a.a, a.b));
+
+  return { fund, labelA, labelB, totalA: snapA.total, totalB: snapB.total, totalChangePct: ((snapB.total - snapA.total) / snapA.total) * 100, rows };
+}
+
+function renderCompareSection() {
+  const card = document.getElementById("compareCard");
+  const funds = listAllFundsInHistory();
+  if (!funds.length) { card.style.display = "none"; return; }
+  card.style.display = "block";
+
+  const fundSel = document.getElementById("compareFundSelector");
+  const prevFund = fundSel.value || "all";
+  fundSel.innerHTML = `<option value="all">All Funds (Consolidated)</option>` + funds.map(f => `<option value="${f.replace(/"/g, "&quot;")}">${f}</option>`).join("");
+  fundSel.value = ["all", ...funds].includes(prevFund) ? prevFund : "all";
+  const compareFund = fundSel.value;
+
+  const months = compareFund === "all" ? listAllPeriodMonths() : listPeriodsForFund(compareFund).map(s => s.period);
+  const selA = document.getElementById("comparePeriodA"), selB = document.getElementById("comparePeriodB");
+  const prevA = selA.value, prevB = selB.value;
+  const opts = `<option value="">— select —</option>` + months.map(m => `<option value="${m}">${monthLabelFromKey(m)}</option>`).join("");
+  selA.innerHTML = opts; selB.innerHTML = opts;
+  selA.value = months.includes(prevA) ? prevA : (months[1] || "");
+  selB.value = months.includes(prevB) ? prevB : (months[0] || "");
+
+  const empty = document.getElementById("compareEmpty"), body = document.getElementById("compareBody");
+  const data = computeCompareData();
+  if (!data) {
+    empty.textContent = !selA.value || !selB.value
+      ? `Pick two saved periods for ${compareFund === "all" ? "the consolidated total" : compareFund} to compare.`
+      : selA.value === selB.value ? "Pick two different periods to compare." : "No comparable data for that selection.";
+    empty.style.display = "block"; body.style.display = "none";
+    return;
+  }
+  empty.style.display = "none"; body.style.display = "block";
+
+  document.getElementById("compareColA").textContent = data.labelA;
+  document.getElementById("compareColB").textContent = data.labelB;
+  document.getElementById("compareKpiRow").innerHTML = `
+    <div class="kpi"><div class="label">${data.labelA} AUM</div><div class="value">R ${fmtCurrency(data.totalA)}</div></div>
+    <div class="kpi"><div class="label">${data.labelB} AUM</div><div class="value">R ${fmtCurrency(data.totalB)}</div></div>
+    <div class="kpi"><div class="label">Change</div><div class="value">${(data.totalChangePct >= 0 ? "+" : "") + data.totalChangePct.toFixed(1)}%</div>
+      <div class="delta ${data.totalChangePct >= 0 ? "up" : "down"}">R ${fmtCurrency(data.totalB - data.totalA)}</div></div>`;
+
+  document.querySelector("#compareTable tbody").innerHTML = data.rows.map(r => `
+    <tr>
+      <td>${r.category}</td>
+      <td class="num">${fmtCurrency(r.a)}</td>
+      <td class="num">${fmtCurrency(r.b)}</td>
+      <td class="num ${r.delta > 0 ? "delta-up" : r.delta < 0 ? "delta-down" : ""}">${r.delta > 0 ? "+" : ""}${fmtCurrency(r.delta)}</td>
     </tr>`).join("");
 }
 
@@ -567,12 +760,13 @@ function thead_sync_indicators() {
 
 /* ---------- overall render ---------- */
 function renderAll() {
+  renderHistorySummary();
   renderKpis();
   renderAumSection();
   renderFundsSection();
   renderAllocationSection();
   renderTradesSection();
-  const anyData = state.aum.length || state.allocation.length || state.trades.length || state.holdingsSnapshots.length;
+  const anyData = state.aum.length || state.allocation.length || state.trades.length || state.holdingsSnapshots.length || Object.keys(historyStore.periods).length;
   document.getElementById("emptyHint").style.display = anyData ? "none" : "block";
   document.getElementById("exportBtn").disabled = !anyData;
 }
@@ -590,7 +784,10 @@ document.getElementById("exportConfirm").addEventListener("click", async () => {
   const subtitle = document.getElementById("exportSubtitle").value.trim();
   btn.disabled = true; btn.textContent = "Building…";
   try {
-    await exportPptx(state, title, subtitle);
+    const trendPoints = computeFundTrendPoints();
+    const trendLabel = selectedFund === "all" ? "All Funds (Consolidated)" : selectedFund;
+    const compare = computeCompareData();
+    await exportPptx(state, title, subtitle, { trendPoints, trendLabel, compare });
     document.getElementById("exportModal").style.display = "none";
     showToast("PowerPoint downloaded");
   } catch (err) {

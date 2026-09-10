@@ -130,7 +130,45 @@ function buildTradesSlide(pptx, trades) {
   return slide;
 }
 
-async function exportPptx(state, title, subtitle) {
+function buildTrendSlide(pptx, points, fundLabel) {
+  const slide = pptx.addSlide();
+  slide.addText("AUM Over Time", { x: 0.5, y: 0.35, w: 8, h: 0.5, fontSize: 22, bold: true, color: PPTX_INK, fontFace: "Arial" });
+  slide.addText(fundLabel, { x: 0.5, y: 0.85, w: 10, h: 0.4, fontSize: 13, color: PPTX_MUTED, fontFace: "Arial" });
+  slide.addChart(pptx.ChartType.line, [{ name: "AUM", labels: points.map(p => p.label), values: points.map(p => Math.round(p.value)) }], {
+    x: 0.5, y: 1.4, w: 12.3, h: 5.6,
+    chartColors: [PPTX_ACCENT], lineSize: 2.5, lineSmooth: true, showLegend: false,
+    valAxisLabelFormatCode: "#,##0,,\"m\"", catAxisLabelFontSize: 10, valAxisLabelFontSize: 10
+  });
+  return slide;
+}
+
+function buildCompareSlide(pptx, compare) {
+  const slide = pptx.addSlide();
+  slide.addText("Period Comparison", { x: 0.5, y: 0.35, w: 10, h: 0.5, fontSize: 22, bold: true, color: PPTX_INK, fontFace: "Arial" });
+  const changeStr = (compare.totalChangePct >= 0 ? "+" : "") + compare.totalChangePct.toFixed(1) + "%";
+  slide.addText(`${compare.labelA} → ${compare.labelB}  ·  R ${Math.round(compare.totalA).toLocaleString()} → R ${Math.round(compare.totalB).toLocaleString()}  (${changeStr})`,
+    { x: 0.5, y: 0.85, w: 12, h: 0.4, fontSize: 13, color: PPTX_MUTED, fontFace: "Arial" });
+
+  const rows = [[
+    { text: "Category", options: { bold: true, color: "FFFFFF", fill: { color: PPTX_ACCENT } } },
+    { text: compare.labelA, options: { bold: true, color: "FFFFFF", fill: { color: PPTX_ACCENT }, align: "right" } },
+    { text: compare.labelB, options: { bold: true, color: "FFFFFF", fill: { color: PPTX_ACCENT }, align: "right" } },
+    { text: "Change", options: { bold: true, color: "FFFFFF", fill: { color: PPTX_ACCENT }, align: "right" } }
+  ]];
+  compare.rows.forEach(r => {
+    rows.push([
+      { text: r.category },
+      { text: "R " + Math.round(r.a).toLocaleString(), options: { align: "right" } },
+      { text: "R " + Math.round(r.b).toLocaleString(), options: { align: "right" } },
+      { text: (r.delta >= 0 ? "+" : "") + "R " + Math.round(r.delta).toLocaleString(), options: { align: "right", color: r.delta >= 0 ? "008300" : "D03B3B" } }
+    ]);
+  });
+  slide.addTable(rows, { x: 0.5, y: 1.4, w: 12.3, h: 5.5, fontSize: 12, fontFace: "Arial", border: { type: "solid", color: "E1E0D9", pt: 0.5 }, autoPage: false });
+  return slide;
+}
+
+async function exportPptx(state, title, subtitle, extras) {
+  extras = extras || {};
   const pptx = new PptxGenJS();
   pptx.defineLayout({ name: "WIDE", width: 13.33, height: 7.5 });
   pptx.layout = "WIDE";
@@ -139,8 +177,10 @@ async function exportPptx(state, title, subtitle) {
   buildTitleSlide(pptx, title, subtitle, asOf);
   if (state.aum.length) buildAumSlide(pptx, state.aum);
   if (state.holdingsSnapshots.length) buildFundsSlide(pptx, state.holdingsSnapshots);
+  if (extras.trendPoints && extras.trendPoints.length >= 2) buildTrendSlide(pptx, extras.trendPoints, extras.trendLabel || "");
   const { segments: activeSegments, label: allocationLabel } = getActiveAllocationSegments();
   if (activeSegments.length) buildAllocationSlide(pptx, activeSegments, allocationLabel);
+  if (extras.compare) buildCompareSlide(pptx, extras.compare);
   if (state.trades.length) buildTradesSlide(pptx, state.trades);
 
   const fileName = (title || "AUM-Dashboard").replace(/[^a-z0-9]+/gi, "-") + ".pptx";

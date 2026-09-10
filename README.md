@@ -13,7 +13,18 @@ A static, client-side dashboard for preparing AUM, asset allocation and trade re
    - `.csv` or `.xlsx` both work for the first three; Fund Holdings additionally accepts `.xls`/`.html`. Sample files are linked under the upload panel.
 3. After each AUM/Allocation/Trade upload, confirm the column mapping (it's auto-guessed from your headers). If the file mixes real trades with other entries (e.g. a general ledger export with margin calls, dividends, maturities alongside actual buys/sells), open **"Exclude some rows"**, pick the column that distinguishes them, and tick the values that aren't real trades — those rows are dropped before the rest of the mapping is applied. Fund Holdings files skip this step entirely (parsed automatically).
 4. The dashboard builds itself: KPIs, an AUM trend chart, a funds-under-management breakdown, an asset allocation breakdown, and a filterable/sortable trade table.
-5. Click **Export to PowerPoint** to download a `.pptx` with native, editable PowerPoint charts and tables built from the same data — not screenshots. Includes a funds-under-management slide whenever Fund Holdings are loaded.
+5. Click **Export to PowerPoint** to download a `.pptx` with native, editable PowerPoint charts and tables built from the same data — not screenshots. Includes a funds-under-management slide whenever Fund Holdings are loaded, plus a trend slide and a period-comparison slide when applicable (see below).
+
+## Tracking history across months
+
+Fund Holdings snapshots aren't just for "right now" — you can save each month and browse/compare across up to however many months you keep:
+
+- **Save this period**, in the Funds Under Management card, saves everything currently loaded in Fund Holdings into a local history, keyed by fund + month (taken from each file's own as-of date). Re-saving the same fund for the same month overwrites it.
+- The **Period selector** next to the fund selector switches between "Current Upload" (what you've just loaded) and any saved month — this drives the funds table, the Asset Allocation card, and what gets exported to PowerPoint.
+- Once 2+ months are saved for the selected fund (or consolidated), a **trend chart** appears automatically, and gets its own slide on export.
+- The **Compare Periods** card lets you pick any two saved months (for one fund, or consolidated) and see the AUM and per-category change between them — also exportable as its own slide.
+- History is saved automatically to this browser's local storage, so it survives closing the tab — but it's tied to this one browser on this one computer. Use **Export history (.json)** to download a portable backup (keep it on the shared drive alongside your source files) and **Import history** to load it into another browser/computer, or restore after clearing browser data. Importing merges in (doesn't wipe existing local history) — matching fund+month entries get overwritten by the imported ones.
+- Nothing else (AUM History, Asset Allocation, Trade Records) is saved across sessions — only Fund Holdings history.
 
 ## Adding a new Fund Holdings format
 
@@ -21,6 +32,6 @@ If a custodian/administrator export doesn't match one of the three known formats
 
 ## Notes
 
-- Nothing is persisted between sessions except your light/dark theme preference (`localStorage`) and, per-file, remembered column mappings are not currently cached — you'll map columns again each time you re-upload a file with a different shape.
+- Nothing is persisted between sessions except your light/dark theme preference, saved Fund Holdings history (see above — both via `localStorage`), and, per-file, remembered column mappings are not currently cached — you'll map columns again each time you re-upload a file with a different shape.
 - Re-uploading a file for a slot replaces that dataset (Fund Holdings and Trade Records replace per fund/file rather than the whole slot).
 - Built with vanilla HTML/CSS/JS + [SheetJS](https://sheetjs.com/), [Chart.js](https://www.chartjs.org/), and [PptxGenJS](https://gitbrent.github.io/PptxGenJS/) — no build step, deployable as-is to GitHub Pages or any static host.
