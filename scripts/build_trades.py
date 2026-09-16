@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from trade_parsers import classify, parse_trade_file  # noqa: E402
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
+DEFAULTS_PATH = Path(__file__).parent / "classification_defaults.json"
 
 # Accepts a single month, a range, or no date at all — the month each row belongs to always
 # comes from its own trade date, so the filename is only a label and a sanity check:
@@ -33,6 +34,22 @@ CONFIG_PATH = Path(__file__).parent / "config.json"
 #   "Trades Report Apex.xlsx"
 TRADE_FILE_RE = re.compile(
     r"^(?:(\d{4})\.(\d{2})(?:\s*-\s*(\d{4})\.(\d{2}))?\s*-\s*)?Trades Report\s+(.+?)\.xlsx?$", re.I)
+
+
+def load_classification_rules(config):
+    """Repo defaults (the decoded transaction codes) with config.json merged on top, so
+    local additions — anything naming specific accounts — stay out of the repo."""
+    rules = {"actions": {}, "asset_classes": {}, "securities": {}, "source_defaults": {}}
+    if DEFAULTS_PATH.exists():
+        with open(DEFAULTS_PATH, "r", encoding="utf-8") as fh:
+            defaults = json.load(fh)
+        for section in rules:
+            # keys starting with "_" are section comments, not codes
+            rules[section].update({k: v for k, v in defaults.get(section, {}).items()
+                                   if not k.startswith("_")})
+    for section in rules:
+        rules[section].update(config.get("trade_classification", {}).get(section, {}))
+    return rules
 
 
 def load_config():
@@ -209,7 +226,7 @@ def main():
         sys.exit(f"No correctly-named trade reports in {folder}")
 
     kinds = {k.lower(): v for k, v in config.get("trade_source_kinds", {}).items()}
-    rules = config.get("trade_classification", {})
+    rules = load_classification_rules(config)
 
     rows, missing_kind, mislabelled = [], set(), []
     for source, declared, path in found:
