@@ -26,8 +26,13 @@ from trade_parsers import classify, parse_trade_file  # noqa: E402
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
 
-# "2026.08 - Trades Report Apex.xlsx" -> ("2026-08", "apex")
-TRADE_FILE_RE = re.compile(r"^(\d{4})\.(\d{2})\s*-\s*Trades Report\s+(.+?)\.xlsx?$", re.I)
+# Accepts a single month, a range, or no date at all — the month each row belongs to always
+# comes from its own trade date, so the filename is only a label and a sanity check:
+#   "2026.08 - Trades Report Apex.xlsx"
+#   "2025.06-2026.08 - Trades Report Apex.xlsx"
+#   "Trades Report Apex.xlsx"
+TRADE_FILE_RE = re.compile(
+    r"^(?:(\d{4})\.(\d{2})(?:\s*-\s*(\d{4})\.(\d{2}))?\s*-\s*)?Trades Report\s+(.+?)\.xlsx?$", re.I)
 
 
 def load_config():
@@ -50,7 +55,11 @@ def month_range(from_key, to_key):
 
 
 def discover_trade_files(folder):
-    """Returns [(month_key, source_name, path)] for every correctly-named trade report."""
+    """Returns [(source_name, declared_range, path)] for every recognised trade report.
+
+    declared_range is (first_month, last_month) parsed from the filename, or None — it's
+    only used to sanity-check that the rows inside land where the name claims.
+    """
     found, malformed = [], []
     for path in sorted(Path(folder).glob("*.xls*")):
         if path.name.startswith("~$"):        # Excel lock files
@@ -59,7 +68,12 @@ def discover_trade_files(folder):
         if not m:
             malformed.append(path.name)
             continue
-        found.append((f"{m.group(1)}-{m.group(2)}", m.group(3).strip(), path))
+        y1, m1, y2, m2, source = m.groups()
+        declared = None
+        if y1:
+            first = f"{y1}-{m1}"
+            declared = (first, f"{y2}-{m2}" if y2 else first)
+        found.append((source.strip(), declared, path))
     return found, malformed
 
 
@@ -194,25 +208,29 @@ def main():
     if not found:
         sys.exit(f"No correctly-named trade reports in {folder}")
 
-    all_months = sorted({month for month, _, _ in found})
-    months = month_range(args.from_month, args.to_month) if args.from_month and args.to_month else all_months
-
     kinds = {k.lower(): v for k, v in config.get("trade_source_kinds", {}).items()}
     rules = config.get("trade_classification", {})
 
-    rows, missing_kind = [], set()
-    for month, source, path in found:
-        if month not in months:
-            continue
+    rows, missing_kind, mislabelled = [], set(), []
+    for source, declared, path in found:
         kind = kinds.get(source.lower())
         if kind is None:
             missing_kind.add(source)
             continue
         parsed = parse_trade_file(path, kind, source)
         for r in parsed:
-            r["month"] = month
+            # the row's own trade date decides its month — the filename is just a label,
+            # so one multi-month export works exactly like twelve single-month files
+            r["month"] = f"{r['date'].year:04d}-{r['date'].month:02d}"
         rows.extend(parsed)
-        print(f"  {path.name:52} {len(parsed):>5} rows")
+        spread = sorted({r["month"] for r in parsed})
+        span = f"{spread[0]} .. {spread[-1]}" if spread else "no dated rows"
+        print(f"  {path.name:46} {len(parsed):>6} rows   {span}")
+
+        if declared and spread:
+            outside = [m for m in spread if m < declared[0] or m > declared[1]]
+            if outside:
+                mislabelled.append((path.name, declared, outside))
 
     if missing_kind:
         print("\nNo parser mapped for these sources — add them to trade_source_kinds in config.json")
@@ -220,8 +238,22 @@ def main():
         for s in sorted(missing_kind):
             print(f"   {s}")
 
+    if mislabelled:
+        print("\n" + "-" * 78)
+        print("FILENAME DOESN'T MATCH THE ROWS INSIDE — the rows are used regardless, but")
+        print("check you exported the period you meant to:")
+        for name, declared, outside in mislabelled:
+            rng = declared[0] if declared[0] == declared[1] else f"{declared[0]}..{declared[1]}"
+            print(f"   {name}\n      name says {rng}, also contains {', '.join(outside)}")
+
     if not rows:
         sys.exit("\nNothing parsed.")
+
+    all_months = sorted({r["month"] for r in rows})
+    months = month_range(args.from_month, args.to_month) if args.from_month and args.to_month else all_months
+    rows = [r for r in rows if r["month"] in months]
+    if not rows:
+        sys.exit(f"\nNo rows in {months[0]}..{months[-1]} — the files cover {all_months[0]}..{all_months[-1]}.")
 
     summary, unknown_actions, unknown_classes, defaulted = summarise(rows, rules)
     report(summary, unknown_actions, unknown_classes, defaulted, months)
