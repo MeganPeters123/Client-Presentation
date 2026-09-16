@@ -1,0 +1,49 @@
+{
+  "_comment": "Copy to config.json and set your own paths. config.json is gitignored because these are internal network locations.",
+
+  "sources": [
+    {
+      "_comment": "Unit trust daily valuation exports (HTML-based .XLS, one per fund per day)",
+      "root": "C:/path/to/Reports/Daily Valuations",
+      "glob": "*/*.XLS"
+    },
+    {
+      "_comment": "Segregated mandate IPD reports (binary .xls), current rolling folder",
+      "root": "C:/path/to/Reports/Daily Mandates",
+      "glob": "*IPD_Daily_*.xls"
+    },
+    {
+      "_comment": "Segregated mandate IPD reports, per-year archive folders",
+      "root": "C:/path/to/Reports/Daily Mandates",
+      "glob": "*/*IPD_Daily_*.xls"
+    },
+    {
+      "_comment": "Anything manually dropped into the working folder (month-end files not in the archive, flat valuation CSVs)",
+      "root": "C:/path/to/Fund Accounting Tools/Presentation Dashboard",
+      "glob": "*"
+    }
+  ],
+
+  "_exclude_comment": "Skip files whose name contains any of these — prices, settlements and trade files aren't holdings valuations",
+  "exclude_name_contains": [
+    "Prices",
+    "Settlements",
+    "Static Data",
+    "Trades Report",
+    "Transactions",
+    "Sell List",
+    "Buy List",
+    "history.json"
+  ],
+
+  "_names_comment": "Some sources only carry a portfolio code (e.g. ABCDEF). Map codes to the fund name you present under.",
+  "fund_name_overrides": {
+    "ABCDEF": "Your Fund Name"
+  },
+
+  "_exclude_funds_comment": "Funds to leave out entirely — e.g. mandates that have since closed",
+  "exclude_funds": [],
+
+  "output": "C:/path/to/Fund Accounting Tools/Presentation Dashboard/aum-history.json",
+  "archive_dir": "C:/path/to/Fund Accounting Tools/Presentation Dashboard/archive"
+}

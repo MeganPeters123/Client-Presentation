@@ -85,14 +85,29 @@ function listPeriodsForFund(fund) {
     .sort((a, b) => b.period.localeCompare(a.period));
 }
 
-/** That fund's most recent saved snapshot at or before the given month (handles funds not
- *  updated every single month) — or null if nothing saved for it yet. */
-function getFundSnapshotAtOrBefore(fund, monthKey) {
-  const candidates = listPeriodsForFund(fund).filter(s => s.period <= monthKey);
-  return candidates.length ? candidates[0] : null;
+/** How many months a fund's last snapshot may be carried forward when it's missing for a
+ *  month. Covers the odd late/missing file, but stops a closed mandate from propping up the
+ *  consolidated total forever — that would silently overstate AUM on a client slide. */
+const MAX_CARRY_FORWARD_MONTHS = 2;
+
+function monthsBetween(fromKey, toKey) {
+  const [fy, fm] = fromKey.split("-").map(Number);
+  const [ty, tm] = toKey.split("-").map(Number);
+  return (ty - fy) * 12 + (tm - fm);
 }
 
-/** Sums every fund's latest-known snapshot at or before the given month. */
+/** That fund's most recent saved snapshot at or before the given month (handles funds not
+ *  updated every single month) — or null if nothing saved for it, or it's gone stale. */
+function getFundSnapshotAtOrBefore(fund, monthKey, maxAgeMonths = MAX_CARRY_FORWARD_MONTHS) {
+  const candidates = listPeriodsForFund(fund).filter(s => s.period <= monthKey);
+  if (!candidates.length) return null;
+  const snap = candidates[0];
+  if (maxAgeMonths != null && monthsBetween(snap.period, monthKey) > maxAgeMonths) return null;
+  return snap;
+}
+
+/** Sums every fund's latest-known snapshot at or before the given month, ignoring funds whose
+ *  last snapshot is too old to still count as current (see MAX_CARRY_FORWARD_MONTHS). */
 function getConsolidatedAtPeriod(monthKey) {
   const funds = listAllFundsInHistory();
   const included = funds.map(f => getFundSnapshotAtOrBefore(f, monthKey)).filter(Boolean);

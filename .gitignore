@@ -1,0 +1,9 @@
+# Holds internal network paths — keep out of the public repo
+scripts/config.json
+
+# Generated history / working data — never commit real fund data
+*history*.json
+archive/
+
+__pycache__/
+*.pyc
