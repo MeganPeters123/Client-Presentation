@@ -167,6 +167,36 @@ function buildCompareSlide(pptx, compare) {
   return slide;
 }
 
+function buildTradeActivitySlide(pptx, activity, series) {
+  const slide = pptx.addSlide();
+  slide.addText("Trading Activity", { x: 0.5, y: 0.35, w: 10, h: 0.5, fontSize: 22, bold: true, color: PPTX_INK, fontFace: "Arial" });
+  const first = activity[0].label, last = activity[activity.length - 1].label;
+  slide.addText(`${first} – ${last}  ·  buys above the line, sells below`,
+    { x: 0.5, y: 0.85, w: 12, h: 0.4, fontSize: 13, color: PPTX_MUTED, fontFace: "Arial" });
+
+  const palette = { "Equity|Buy": "2A78D6", "Equity|Sell": "8FAADC", "Bond|Buy": "1C8299",
+    "Bond|Sell": "6FC2D6", "Equity|Corporate Action": "EDA100" };
+
+  const chartData = series.map(({ assetClass, action }) => ({
+    name: `${assetClass} ${action}`,
+    labels: activity.map(a => a.label),
+    values: activity.map(a => {
+      const v = ((a.byClass[assetClass] || {})[action] || {}).value || 0;
+      return Math.round(action === "Sell" ? -v : v);
+    })
+  }));
+
+  slide.addChart(pptx.ChartType.bar, chartData, {
+    x: 0.5, y: 1.4, w: 12.3, h: 5.5,
+    barDir: "col", barGrouping: "clustered",
+    chartColors: series.map((s, i) => palette[`${s.assetClass}|${s.action}`] || PPTX_PALETTE[i % PPTX_PALETTE.length]),
+    showLegend: true, legendPos: "b", legendFontSize: 10,
+    catAxisLabelFontSize: 9, valAxisLabelFontSize: 10,
+    valAxisLabelFormatCode: "#,##0,,\"m\""
+  });
+  return slide;
+}
+
 async function exportPptx(state, title, subtitle, extras) {
   extras = extras || {};
   const pptx = new PptxGenJS();
@@ -181,6 +211,9 @@ async function exportPptx(state, title, subtitle, extras) {
   const { segments: activeSegments, label: allocationLabel } = getActiveAllocationSegments();
   if (activeSegments.length) buildAllocationSlide(pptx, activeSegments, allocationLabel);
   if (extras.compare) buildCompareSlide(pptx, extras.compare);
+  if (extras.tradeActivity && extras.tradeActivity.activity.length) {
+    buildTradeActivitySlide(pptx, extras.tradeActivity.activity, extras.tradeActivity.series);
+  }
   if (state.trades.length) buildTradesSlide(pptx, state.trades);
 
   const fileName = (title || "AUM-Dashboard").replace(/[^a-z0-9]+/gi, "-") + ".pptx";

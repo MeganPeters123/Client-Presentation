@@ -552,10 +552,11 @@ document.getElementById("importHistoryBtn").addEventListener("click", () => {
 document.getElementById("importHistoryFile").addEventListener("change", async e => {
   if (!e.target.files.length) return;
   try {
-    const n = await importHistoryFromFile(e.target.files[0]);
-    showToast(`Imported ${n} saved snapshot${n === 1 ? "" : "s"}`);
-    renderHistorySummary();
-    renderFundsSection();
+    const { snapshots, tradeMonths } = await importHistoryFromFile(e.target.files[0]);
+    const parts = [`${snapshots} saved snapshot${snapshots === 1 ? "" : "s"}`];
+    if (tradeMonths) parts.push(`${tradeMonths} month${tradeMonths === 1 ? "" : "s"} of trades`);
+    showToast("Imported " + parts.join(" and "));
+    renderAll();
   } catch (err) {
     console.error(err);
     showToast("Could not import that file: " + err.message);
@@ -654,6 +655,60 @@ function renderAllocationSection() {
       <td class="num">${s.pct.toFixed(1)}%</td>
     </tr>`).join("");
   renderAllocationChart(segments);
+}
+
+/* ---------- Trading Activity (from saved trade history) ---------- */
+// Cash and money-market flows dwarf the equity/bond trading Megan presents on, so they're
+// off the chart by default rather than left out of the data.
+const TRADE_FOCUS_CLASSES = ["Equity", "Bond"];
+
+document.getElementById("tradeShowAllClasses").addEventListener("change", renderTradeActivitySection);
+
+function tradeSeriesToPlot(showAll) {
+  const classes = listTradeAssetClasses();
+  const ordered = [
+    ...TRADE_FOCUS_CLASSES.filter(c => classes.includes(c)),
+    ...(showAll ? classes.filter(c => !TRADE_FOCUS_CLASSES.includes(c)).sort() : [])
+  ];
+  const series = [];
+  ordered.forEach(assetClass => {
+    ["Buy", "Sell", "Corporate Action"].forEach(action => {
+      const used = listTradeMonths().some(m => tradeValue(m, assetClass, action) > 0);
+      if (used) series.push({ assetClass, action });
+    });
+  });
+  return series;
+}
+
+function renderTradeActivitySection() {
+  const card = document.getElementById("tradeActivityCard");
+  const activity = listTradeActivity();
+  if (!activity.length) { card.style.display = "none"; return; }
+  card.style.display = "block";
+
+  const showAll = document.getElementById("tradeShowAllClasses").checked;
+  const series = tradeSeriesToPlot(showAll);
+
+  const first = activity[0].label, last = activity[activity.length - 1].label;
+  document.getElementById("tradeActivitySubtitle").textContent =
+    `${first} – ${last} · buys above the line, sells below` +
+    (showAll ? "" : " · cash and money market excluded from the chart");
+
+  renderTradeActivityChart(activity, series);
+
+  // table always carries every class, so nothing is hidden by the chart's focus
+  const allSeries = tradeSeriesToPlot(true);
+  const thead = document.querySelector("#tradeActivityTable thead");
+  thead.innerHTML = "<tr><th>Month</th>" +
+    allSeries.map(s => `<th style="text-align:right;">${s.assetClass} ${s.action}</th>`).join("") + "</tr>";
+
+  const tbody = document.querySelector("#tradeActivityTable tbody");
+  tbody.innerHTML = activity.slice().reverse().map(a => "<tr>" +
+    `<td>${a.label}</td>` +
+    allSeries.map(s => {
+      const v = ((a.byClass[s.assetClass] || {})[s.action] || {}).value || 0;
+      return `<td class="num">${v ? fmtCurrency(v) : "—"}</td>`;
+    }).join("") + "</tr>").join("");
 }
 
 /* ---------- Trades section ---------- */
@@ -765,8 +820,10 @@ function renderAll() {
   renderAumSection();
   renderFundsSection();
   renderAllocationSection();
+  renderTradeActivitySection();
   renderTradesSection();
-  const anyData = state.aum.length || state.allocation.length || state.trades.length || state.holdingsSnapshots.length || Object.keys(historyStore.periods).length;
+  const anyData = state.aum.length || state.allocation.length || state.trades.length || state.holdingsSnapshots.length ||
+    Object.keys(historyStore.periods).length || Object.keys(historyStore.trades || {}).length;
   document.getElementById("emptyHint").style.display = anyData ? "none" : "block";
   document.getElementById("exportBtn").disabled = !anyData;
 }
@@ -787,7 +844,11 @@ document.getElementById("exportConfirm").addEventListener("click", async () => {
     const trendPoints = computeFundTrendPoints();
     const trendLabel = selectedFund === "all" ? "All Funds (Consolidated)" : selectedFund;
     const compare = computeCompareData();
-    await exportPptx(state, title, subtitle, { trendPoints, trendLabel, compare });
+    const tradeActivity = {
+      activity: listTradeActivity(),
+      series: tradeSeriesToPlot(document.getElementById("tradeShowAllClasses").checked)
+    };
+    await exportPptx(state, title, subtitle, { trendPoints, trendLabel, compare, tradeActivity });
     document.getElementById("exportModal").style.display = "none";
     showToast("PowerPoint downloaded");
   } catch (err) {

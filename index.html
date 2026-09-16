@@ -168,6 +168,25 @@
     </div>
   </div>
 
+  <div id="tradeActivityCard" class="card" style="display:none;">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Trading Activity</div>
+        <div class="card-subtitle" id="tradeActivitySubtitle">Buys and sells by month</div>
+      </div>
+      <div class="funds-controls">
+        <label class="inline-check"><input type="checkbox" id="tradeShowAllClasses"> Include cash &amp; money market</label>
+      </div>
+    </div>
+    <div class="chart-wrap" style="height:300px;"><canvas id="tradeActivityChart"></canvas></div>
+    <div class="table-scroll" style="margin-top:18px;">
+      <table class="data-table" id="tradeActivityTable">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
   <div id="tradesCard" class="card" style="display:none;">
     <div class="card-head">
       <div>

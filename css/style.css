@@ -100,6 +100,8 @@ h1,h2,h3{ margin:0; }
 .funds-controls select{ padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface); font-size:12.5px; }
 .delta-up{ color:var(--good); }
 .delta-down{ color:var(--bad); }
+.inline-check{ display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink-2); cursor:pointer; }
+.inline-check input{ cursor:pointer; }
 
 /* ---- kpis ---- */
 .kpi-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px; }

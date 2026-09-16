@@ -17,26 +17,30 @@ function monthLabelFromKey(key) {
 function loadHistoryStore() {
   try {
     const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
-    if (!raw) return { periods: {} };
+    if (!raw) return { periods: {}, trades: {} };
     const parsed = JSON.parse(raw);
     const periods = {};
     Object.entries(parsed.periods || {}).forEach(([key, snap]) => {
       periods[key] = { ...snap, asOf: snap.asOf ? new Date(snap.asOf) : null, savedAt: snap.savedAt ? new Date(snap.savedAt) : null };
     });
-    return { periods };
+    return { periods, trades: parsed.trades || {} };
   } catch (e) {
     console.error("Could not read saved history", e);
-    return { periods: {} };
+    return { periods: {}, trades: {} };
   }
+}
+
+function serializeHistoryStore() {
+  const out = { periods: {}, trades: historyStore.trades || {} };
+  Object.entries(historyStore.periods).forEach(([key, snap]) => {
+    out.periods[key] = { ...snap, asOf: snap.asOf ? snap.asOf.toISOString() : null, savedAt: snap.savedAt ? snap.savedAt.toISOString() : null };
+  });
+  return out;
 }
 
 function persistHistoryStore() {
   try {
-    const serializable = { periods: {} };
-    Object.entries(historyStore.periods).forEach(([key, snap]) => {
-      serializable.periods[key] = { ...snap, asOf: snap.asOf ? snap.asOf.toISOString() : null, savedAt: snap.savedAt ? snap.savedAt.toISOString() : null };
-    });
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(serializable));
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(serializeHistoryStore()));
     return true;
   } catch (e) {
     console.error("Could not save history locally", e);
@@ -121,11 +125,7 @@ function getConsolidatedAtPeriod(monthKey) {
 }
 
 function exportHistoryToFile() {
-  const serializable = { periods: {} };
-  Object.entries(historyStore.periods).forEach(([key, snap]) => {
-    serializable.periods[key] = { ...snap, asOf: snap.asOf ? snap.asOf.toISOString() : null, savedAt: snap.savedAt ? snap.savedAt.toISOString() : null };
-  });
-  const blob = new Blob([JSON.stringify(serializable, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(serializeHistoryStore(), null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -139,11 +139,45 @@ function exportHistoryToFile() {
 async function importHistoryFromFile(file) {
   const text = await file.text();
   const parsed = JSON.parse(text);
-  let imported = 0;
+  let imported = 0, tradeMonths = 0;
   Object.entries(parsed.periods || {}).forEach(([key, snap]) => {
     historyStore.periods[key] = { ...snap, asOf: snap.asOf ? new Date(snap.asOf) : null, savedAt: snap.savedAt ? new Date(snap.savedAt) : null };
     imported++;
   });
-  if (imported) persistHistoryStore();
-  return imported;
+  historyStore.trades = historyStore.trades || {};
+  Object.entries(parsed.trades || {}).forEach(([month, entry]) => {
+    historyStore.trades[month] = entry;
+    tradeMonths++;
+  });
+  if (imported || tradeMonths) persistHistoryStore();
+  return { snapshots: imported, tradeMonths };
+}
+
+/* ---------- trading activity ---------- */
+
+function listTradeMonths() {
+  return Object.keys(historyStore.trades || {}).sort();
+}
+
+/** [{ month, label, byClass }] oldest first, for the chart and table. */
+function listTradeActivity() {
+  return listTradeMonths().map(month => ({
+    month,
+    label: monthLabelFromKey(month),
+    byClass: (historyStore.trades[month] || {}).byClass || {}
+  }));
+}
+
+function tradeValue(month, assetClass, action) {
+  const byClass = (historyStore.trades[month] || {}).byClass || {};
+  return ((byClass[assetClass] || {})[action] || {}).value || 0;
+}
+
+/** Every asset class present across the loaded trade months. */
+function listTradeAssetClasses() {
+  const seen = new Set();
+  Object.values(historyStore.trades || {}).forEach(entry => {
+    Object.keys(entry.byClass || {}).forEach(c => seen.add(c));
+  });
+  return [...seen];
 }
