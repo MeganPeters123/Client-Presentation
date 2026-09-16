@@ -5,7 +5,6 @@
     "anything security-specific) live there instead. Kept in the repo because decoding these",
     "codes is the hard part — losing it would mean redoing that work."
   ],
-
   "actions": {
     "_buy_sell": "straightforward trades",
     "BUY": "Buy",
@@ -15,7 +14,6 @@
     "Fixed Interest Purchase": "Buy",
     "Fixed Interest Sale": "Sell",
     "Discount Security Purch": "Buy",
-
     "_corporate_actions": "shares received/adjusted and cash close-outs, not purchases",
     "NONTAXSPINR": "Corporate Action",
     "CA_CASH_CLOSE": "Corporate Action",
@@ -23,7 +21,6 @@
     "SPLT-": "Corporate Action",
     "BUYIK": "Corporate Action",
     "SELLIK": "Corporate Action",
-
     "_reversals": "the R prefix negates an earlier posting — RBUYIK reverses BUYIK exactly",
     "RBUY": "Ignore",
     "RSELL": "Ignore",
@@ -37,15 +34,13 @@
     "RWEXP": "Ignore",
     "RINT": "Ignore",
     "RINT -": "Ignore",
-
-    "_derivatives": "notional — would swamp equity flow if counted as equity trading",
-    "BUYFUT": "Ignore",
-    "SELLFUT": "Ignore",
-    "Futures Purchase": "Ignore",
+    "_derivatives": "index futures count as JSE equity exposure; FX contracts do not",
+    "BUYFUT": "Buy",
+    "SELLFUT": "Sell",
+    "Futures Purchase": "Buy",
     "OPCCT": "Ignore",
-    "OPLFUT": "Ignore",
-    "CLLFUT": "Ignore",
-
+    "OPLFUT": "Buy",
+    "CLLFUT": "Sell",
     "_income": "dividends, interest, coupons",
     "DIVD": "Ignore",
     "INCD": "Ignore",
@@ -58,7 +53,6 @@
     "CUP": "Ignore",
     "Dividend Entitlement": "Ignore",
     "Interest Entitlement": "Ignore",
-
     "_expenses": "fees and expense adjustments",
     "EXP": "Ignore",
     "EXP +": "Ignore",
@@ -71,13 +65,11 @@
     "CAPEXP": "Ignore",
     "CAPEX+": "Ignore",
     "CAPEX-": "Ignore",
-
     "_valuation": "mark-to-market postings, not trades",
     "MTM+": "Ignore",
     "MTM-": "Ignore",
     "MTM-C": "Ignore",
     "MTM+C": "Ignore",
-
     "_unitholder_and_fx": "unit class switches and currency conversions, not portfolio trades",
     "APPRO": "Ignore",
     "EXPRO": "Ignore",
@@ -85,14 +77,12 @@
     "CDN": "Ignore",
     "CBUY": "Ignore",
     "CSELL": "Ignore",
-
     "_other": "",
     "MATURITY": "Ignore",
     "Security Maturity": "Ignore",
     "Call Payment\\Margin Call": "Ignore",
     "Adjustment": "Ignore"
   },
-
   "asset_classes": {
     "EQ": "Equity",
     "REIT": "Equity",
@@ -100,17 +90,17 @@
     "PREF": "Equity",
     "Share purchase": "Equity",
     "Share sale": "Equity",
-
     "VB": "Bond",
     "ZCB": "Bond",
     "Fixed Interest Purchase": "Bond",
     "Fixed Interest Sale": "Bond",
     "Discount Security Purch": "Bond",
-
     "CD": "Money Market",
     "NCD": "Money Market",
-
     "CSH": "Cash",
-    "MARGIN": "Cash"
+    "MARGIN": "Cash",
+    "IDXFT": "Equity",
+    "FT": "Equity",
+    "Futures Purchase": "Equity"
   }
 }
