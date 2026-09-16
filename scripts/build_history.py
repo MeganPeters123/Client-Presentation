@@ -277,8 +277,8 @@ def report_categories(best, unmapped):
     for cat, value in sorted(totals.items(), key=lambda kv: -kv[1]):
         print(f"   {cat:52} R {value:>18,.2f}")
     if unmapped:
-        print("\nNot in category_overrides — check these are the labels you want on a slide,")
-        print("and add them to config.json if any should fold into another category:")
+        print("\nPassing through as-is (no category_overrides entry). Fine if these are the labels")
+        print("you want on a slide — add them to config.json if any should fold into another:")
         for cat in unmapped:
             print(f"   {cat}")
 
