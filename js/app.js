@@ -825,38 +825,6 @@ function renderAll() {
   const anyData = state.aum.length || state.allocation.length || state.trades.length || state.holdingsSnapshots.length ||
     Object.keys(historyStore.periods).length || Object.keys(historyStore.trades || {}).length;
   document.getElementById("emptyHint").style.display = anyData ? "none" : "block";
-  document.getElementById("exportBtn").disabled = !anyData;
 }
-
-/* ---------- export ---------- */
-document.getElementById("exportBtn").addEventListener("click", () => {
-  document.getElementById("exportModal").style.display = "flex";
-});
-document.getElementById("exportCancel").addEventListener("click", () => {
-  document.getElementById("exportModal").style.display = "none";
-});
-document.getElementById("exportConfirm").addEventListener("click", async () => {
-  const btn = document.getElementById("exportConfirm");
-  const title = document.getElementById("exportTitle").value.trim() || "Aylett & Co";
-  const subtitle = document.getElementById("exportSubtitle").value.trim();
-  btn.disabled = true; btn.textContent = "Building…";
-  try {
-    const trendPoints = computeFundTrendPoints();
-    const trendLabel = selectedFund === "all" ? "All Funds (Consolidated)" : selectedFund;
-    const compare = computeCompareData();
-    const tradeActivity = {
-      activity: listTradeActivity(),
-      series: tradeSeriesToPlot(document.getElementById("tradeShowAllClasses").checked)
-    };
-    await exportPptx(state, title, subtitle, { trendPoints, trendLabel, compare, tradeActivity });
-    document.getElementById("exportModal").style.display = "none";
-    showToast("PowerPoint downloaded");
-  } catch (err) {
-    console.error(err);
-    showToast("Export failed: " + err.message);
-  } finally {
-    btn.disabled = false; btn.textContent = "Download .pptx";
-  }
-});
 
 renderAll();
