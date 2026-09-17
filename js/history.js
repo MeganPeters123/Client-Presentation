@@ -153,6 +153,84 @@ async function importHistoryFromFile(file) {
   return { snapshots: imported, tradeMonths };
 }
 
+/* ---------- position-level holdings ---------- */
+
+function listFundsWithHoldings() {
+  return [...new Set(Object.values(historyStore.periods)
+    .filter(s => (s.holdings || []).length)
+    .map(s => s.fund))].sort();
+}
+
+function getHoldings(fund, monthKey) {
+  const snap = historyStore.periods[`${fund}|${monthKey}`];
+  return (snap && snap.holdings) || [];
+}
+
+function listHoldingMonthsForFund(fund) {
+  return Object.values(historyStore.periods)
+    .filter(s => s.fund === fund && (s.holdings || []).length)
+    .map(s => s.period)
+    .sort()
+    .reverse();
+}
+
+/** Tickers are more stable than names across periods, so key on ticker where present. */
+function holdingKey(h) {
+  return (h.ticker || h.name || "").trim().toUpperCase();
+}
+
+/** Cash, call accounts, money-market funds and fee accruals aren't "holdings" for a
+ *  top-10 or a portfolio-changes list — they're the residual the portfolio sits in. */
+function isCashLike(h) {
+  return /cash/i.test(h.category || "");
+}
+
+function holdingsByKey(fund, monthKey, { excludeCash = true } = {}) {
+  const map = new Map();
+  getHoldings(fund, monthKey).forEach(h => {
+    if (excludeCash && isCashLike(h)) return;
+    const k = holdingKey(h);
+    if (!k) return;
+    // a security can appear more than once (different classes/accounts) — combine
+    const prev = map.get(k);
+    if (prev) { prev.pct += h.pct || 0; prev.value += h.value || 0; }
+    else map.set(k, { ...h, pct: h.pct || 0, value: h.value || 0 });
+  });
+  return map;
+}
+
+/** Top N by current weight, with the comparison period's weight alongside. */
+function computeTopHoldings(fund, currentMonth, priorMonth, n = 10) {
+  const now = holdingsByKey(fund, currentMonth);
+  const before = holdingsByKey(fund, priorMonth);
+  return [...now.values()]
+    .sort((a, b) => b.pct - a.pct)
+    .slice(0, n)
+    .map(h => {
+      const prior = before.get(holdingKey(h));
+      const priorPct = prior ? prior.pct : 0;
+      return { name: h.name, ticker: h.ticker, current: h.pct, prior: priorPct, change: h.pct - priorPct };
+    });
+}
+
+/** Positions opened since the comparison period, and those closed out of it. */
+function computePortfolioChanges(fund, currentMonth, priorMonth, minPct = 0.01) {
+  const now = holdingsByKey(fund, currentMonth);
+  const before = holdingsByKey(fund, priorMonth);
+
+  const entries = [...now.values()]
+    .filter(h => !before.has(holdingKey(h)) && h.pct >= minPct)
+    .map(h => ({ name: h.name, ticker: h.ticker, change: h.pct }))
+    .sort((a, b) => b.change - a.change);
+
+  const exits = [...before.values()]
+    .filter(h => !now.has(holdingKey(h)) && h.pct >= minPct)
+    .map(h => ({ name: h.name, ticker: h.ticker, change: -h.pct }))
+    .sort((a, b) => a.change - b.change);
+
+  return { entries, exits };
+}
+
 /* ---------- trading activity ---------- */
 
 function listTradeMonths() {

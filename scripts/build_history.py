@@ -294,6 +294,12 @@ def write_history(best, out_path):
             "asOf": snap["asOf"].strftime("%Y-%m-%dT12:00:00"),
             "total": round(snap["total"], 2),
             "segments": [{"category": s["category"], "value": round(s["value"], 2)} for s in snap["segments"]],
+            # position level, for Top 10 Holdings and Portfolio Changes. Kept lean — this is
+            # ~60 rows per fund per month and would otherwise dominate the file.
+            "holdings": [{
+                "name": h["name"], "ticker": h.get("ticker", ""), "category": h.get("category", ""),
+                "pct": round(h.get("pct") or 0.0, 4), "value": round(h.get("value") or 0.0, 2),
+            } for h in snap.get("holdings", [])],
             "source": snap["source"],
             "format": snap["format"],
             "savedAt": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),

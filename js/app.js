@@ -657,6 +657,99 @@ function renderAllocationSection() {
   renderAllocationChart(segments);
 }
 
+/* ---------- Top 10 Holdings + Portfolio Changes ---------- */
+["holdingsFundSelector", "holdingsPeriodA", "holdingsPeriodB"].forEach(id => {
+  document.getElementById(id).addEventListener("change", renderHoldingsSections);
+});
+
+/** Same month a year earlier if we have it, else the oldest we do — matches how the
+ *  deck compares against the prior year rather than the prior month. */
+function defaultComparisonMonth(months, current) {
+  const [y, m] = current.split("-").map(Number);
+  const yearBack = `${y - 1}-${String(m).padStart(2, "0")}`;
+  if (months.includes(yearBack)) return yearBack;
+  const older = months.filter(x => x < current);
+  return older.length ? older[older.length - 1] : current;
+}
+
+function renderHoldingsSections() {
+  const card = document.getElementById("holdingsCard");
+  const changesCard = document.getElementById("portfolioChangesCard");
+  const funds = listFundsWithHoldings();
+  if (!funds.length) { card.style.display = "none"; changesCard.style.display = "none"; return; }
+  card.style.display = "block";
+
+  const fundSel = document.getElementById("holdingsFundSelector");
+  const prevFund = fundSel.value;
+  fundSel.innerHTML = funds.map(f => `<option value="${f.replace(/"/g, "&quot;")}">${f}</option>`).join("");
+  fundSel.value = funds.includes(prevFund) ? prevFund : funds[0];
+  const fund = fundSel.value;
+
+  const months = listHoldingMonthsForFund(fund).slice().sort();   // oldest first
+  const selA = document.getElementById("holdingsPeriodA");
+  const selB = document.getElementById("holdingsPeriodB");
+  const opts = months.slice().reverse().map(m => `<option value="${m}">${monthLabelFromKey(m)}</option>`).join("");
+  const prevA = selA.value, prevB = selB.value;
+  selA.innerHTML = opts; selB.innerHTML = opts;
+  selB.value = months.includes(prevB) ? prevB : months[months.length - 1];
+  selA.value = months.includes(prevA) && prevA !== selB.value ? prevA : defaultComparisonMonth(months, selB.value);
+
+  const current = selB.value, prior = selA.value;
+  const empty = document.getElementById("holdingsEmpty");
+  const body = document.getElementById("holdingsBody");
+  const top = computeTopHoldings(fund, current, prior, 10);
+  if (!top.length) {
+    empty.textContent = `No holdings saved for ${fund} in ${monthLabelFromKey(current)}.`;
+    empty.style.display = "block"; body.style.display = "none";
+    changesCard.style.display = "none";
+    return;
+  }
+  empty.style.display = "none"; body.style.display = "block";
+  changesCard.style.display = "block";
+
+  const samePeriod = current === prior;
+  document.getElementById("holdingsSubtitle").textContent =
+    `${fund} — ${monthLabelFromKey(current)}` + (samePeriod ? "" : ` vs ${monthLabelFromKey(prior)}`);
+  document.getElementById("topColB").textContent = monthLabelFromKey(current);
+  document.getElementById("topColA").textContent = monthLabelFromKey(prior);
+
+  document.querySelector("#topHoldingsTable tbody").innerHTML = top.map(h => `
+    <tr>
+      <td>${h.name}</td>
+      <td class="num">${h.current.toFixed(1)}</td>
+      <td class="num">${h.prior ? h.prior.toFixed(1) : "—"}</td>
+      <td class="num ${h.change > 0 ? "delta-up" : h.change < 0 ? "delta-down" : ""}">${h.change > 0 ? "+" : ""}${h.change.toFixed(1)}</td>
+    </tr>`).join("");
+
+  // sum what's displayed, not the raw values — otherwise the total doesn't tie to the
+  // column above it and reads as an arithmetic error on a client slide
+  const round1 = v => Math.round(v * 10) / 10;
+  const sumCurrent = top.reduce((s, h) => s + round1(h.current), 0);
+  const sumPrior = top.reduce((s, h) => s + round1(h.prior), 0);
+  document.querySelector("#topHoldingsTable tfoot").innerHTML = `
+    <tr>
+      <th>Total</th>
+      <th style="text-align:right;">${sumCurrent.toFixed(1)}</th>
+      <th style="text-align:right;">${sumPrior ? sumPrior.toFixed(1) : "—"}</th>
+      <th></th>
+    </tr>`;
+
+  renderPortfolioChanges(fund, current, prior);
+}
+
+function renderPortfolioChanges(fund, current, prior) {
+  const { entries, exits } = computePortfolioChanges(fund, current, prior);
+  document.getElementById("portfolioChangesSubtitle").textContent =
+    `${fund} — opened and closed between ${monthLabelFromKey(prior)} and ${monthLabelFromKey(current)}`;
+
+  const rows = (list, cls) => list.length
+    ? list.map(h => `<tr><td>${h.name}</td><td class="num ${cls}">${h.change > 0 ? "+" : ""}${h.change.toFixed(1)}</td></tr>`).join("")
+    : `<tr><td colspan="2" style="color:var(--ink-muted);">None</td></tr>`;
+
+  document.querySelector("#entriesTable tbody").innerHTML = rows(entries, "delta-up");
+  document.querySelector("#exitsTable tbody").innerHTML = rows(exits, "delta-down");
+}
+
 /* ---------- Trading Activity (from saved trade history) ---------- */
 // Cash and money-market flows dwarf the equity/bond trading Megan presents on, so they're
 // off the chart by default rather than left out of the data.
@@ -820,6 +913,7 @@ function renderAll() {
   renderAumSection();
   renderFundsSection();
   renderAllocationSection();
+  renderHoldingsSections();
   renderTradeActivitySection();
   renderTradesSection();
   const anyData = state.aum.length || state.allocation.length || state.trades.length || state.holdingsSnapshots.length ||

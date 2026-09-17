@@ -146,6 +146,8 @@ def parse_custodian_html(path):
             "total_value": to_number(cell("Sum of Market Value Income")),
             "pct": to_number(cell("% of Total Market Value")),
             "ccy": cell("CCY"),
+            "ticker": cell("Ticker"),
+            "isin": cell("ISIN Code"),
         })
 
     if not flat:
@@ -167,6 +169,7 @@ def parse_custodian_html(path):
     # local/foreign split per level-2 asset class, from its level-4 leaf holdings' currency
     current_l2 = None
     split_by_class = {}
+    positions = []
     for r in flat:
         if r["level"] == 2 and r["row_class"] == "cLink":
             current_l2 = r["label"].strip()
@@ -174,7 +177,12 @@ def parse_custodian_html(path):
         elif r["level"] == 4 and r["row_class"] == "cIssue" and current_l2:
             bucket = split_by_class[current_l2]
             side = "local" if is_local_ccy(r["ccy"]) else "foreign"
-            bucket[side] += r["pct"] or 0.0
+            pct = r["pct"] or 0.0
+            bucket[side] += pct
+            positions.append({
+                "name": r["label"], "ticker": r["ticker"], "ccy": r["ccy"],
+                "category": title_case(current_l2), "pct": pct, "value": (pct / 100.0) * fund_total,
+            })
 
     segments = []
     for r in flat:
@@ -194,7 +202,8 @@ def parse_custodian_html(path):
 
     return [{
         "fund": fund_name, "fundCode": None, "asOf": as_of, "total": fund_total,
-        "segments": segments, "source": path.name, "format": "Custodian HTML",
+        "segments": segments, "holdings": positions,
+        "source": path.name, "format": "Custodian HTML",
     }]
 
 
@@ -244,15 +253,28 @@ def parse_flat_csv(path):
         base = CATSUB_BASE_CATEGORY.get(catsub, "Other")
         label = local_foreign_label(base, "local" if is_local_ccy(ccy) else "foreign")
 
-        entry = by_fund.setdefault(pfolio, {"total": 0.0, "segments": {}})
+        entry = by_fund.setdefault(pfolio, {"total": 0.0, "segments": {}, "holdings": []})
         entry["total"] += value
         entry["segments"][label] = entry["segments"].get(label, 0.0) + value
+        name = row[col_index["Short Name"]].strip() if "Short Name" in col_index and col_index["Short Name"] < len(row) else ""
+        entry["holdings"].append({
+            "name": name or row[col_index["Security"]].strip(),
+            "ticker": row[col_index["Security"]].strip() if "Security" in col_index else "",
+            "ccy": str(ccy or "").strip(), "category": label, "value": value,
+        })
 
-    return [{
-        "fund": fund, "fundCode": None, "asOf": as_of, "total": entry["total"],
-        "segments": [{"category": c, "value": v} for c, v in entry["segments"].items()],
-        "source": path.name, "format": "Flat CSV",
-    } for fund, entry in by_fund.items()]
+    out = []
+    for fund, entry in by_fund.items():
+        total = entry["total"]
+        for h in entry["holdings"]:
+            h["pct"] = (h["value"] / total * 100.0) if total else 0.0
+        out.append({
+            "fund": fund, "fundCode": None, "asOf": as_of, "total": total,
+            "segments": [{"category": c, "value": v} for c, v in entry["segments"].items()],
+            "holdings": entry["holdings"],
+            "source": path.name, "format": "Flat CSV",
+        })
+    return out
 
 
 # --------------------------------- format C: "Investment Portfolio Detail" .xls
@@ -300,7 +322,11 @@ def parse_ipd_xls(path):
     if fund_code and fund_code.endswith(".0"):
         fund_code = fund_code[:-2]
 
-    segments = []
+    pct_total_col = next((j for j, c in enumerate(grid[header_idx])
+                          if re.search(r"%\s*of\s*total", str(c or ""), re.I)), -1)
+
+    segments, positions = [], []
+    current_class = ""
     for row in grid[header_idx + 1:]:
         if not row:
             continue
@@ -310,11 +336,17 @@ def parse_ipd_xls(path):
         isin = str(row[isin_col] or "").strip() if isin_col < len(row) else ""
         holding_total = row[holding_col] if holding_col < len(row) else ""
         pct_category = to_number(row[pct_cat_col]) if pct_cat_col < len(row) else None
+        value = to_number(row[value_col]) if value_col < len(row) else None
+
         # a top-level asset class is 100% of its own category, with no ISIN/holding of its own
         if not isin and holding_total in ("", None) and pct_category is not None and pct_category >= 99.9:
-            segments.append({
-                "category": normalize_asset_class_label(label),
-                "value": to_number(row[value_col]) or 0.0,
+            current_class = normalize_asset_class_label(label)
+            segments.append({"category": current_class, "value": value or 0.0})
+        elif isin and holding_total not in ("", None):
+            positions.append({
+                "name": str(row[1] or "").strip() or label, "ticker": label, "ccy": "",
+                "category": current_class, "value": value or 0.0,
+                "pct": (to_number(row[pct_total_col]) if pct_total_col != -1 and pct_total_col < len(row) else None) or 0.0,
             })
 
     if not segments:
@@ -323,6 +355,7 @@ def parse_ipd_xls(path):
     return [{
         "fund": fund_name, "fundCode": fund_code, "asOf": as_of,
         "total": sum(s["value"] for s in segments), "segments": segments,
+        "holdings": positions,
         "source": path.name, "format": "IPD Detail (.xls)",
     }]
 

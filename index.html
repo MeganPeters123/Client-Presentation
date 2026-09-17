@@ -164,6 +164,65 @@
     </div>
   </div>
 
+  <div id="holdingsCard" class="card" style="display:none;">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Top 10 Holdings</div>
+        <div class="card-subtitle" id="holdingsSubtitle">Largest positions, against a comparison period</div>
+      </div>
+      <div class="funds-controls">
+        <select id="holdingsFundSelector"></select>
+        <select id="holdingsPeriodA" title="Comparison period"></select>
+        <span class="card-subtitle">vs</span>
+        <select id="holdingsPeriodB" title="Current period"></select>
+      </div>
+    </div>
+    <div id="holdingsEmpty" class="empty-hint" style="padding:24px 20px;">Pick a fund and two periods.</div>
+    <div id="holdingsBody" style="display:none;">
+      <div class="table-scroll">
+        <table class="data-table" id="topHoldingsTable">
+          <thead><tr>
+            <th>Holding</th>
+            <th style="text-align:right;" id="topColB">Current</th>
+            <th style="text-align:right;" id="topColA">Prior</th>
+            <th style="text-align:right;">Change</th>
+          </tr></thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="portfolioChangesCard" class="card" style="display:none;">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Portfolio Changes</div>
+        <div class="card-subtitle" id="portfolioChangesSubtitle">Positions opened and closed between the two periods</div>
+      </div>
+    </div>
+    <div class="grid2">
+      <div>
+        <div class="card-subtitle" style="margin-bottom:8px;">Entries</div>
+        <div class="table-scroll">
+          <table class="data-table" id="entriesTable">
+            <thead><tr><th>Holding</th><th style="text-align:right;">Change (%)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <div class="card-subtitle" style="margin-bottom:8px;">Exits</div>
+        <div class="table-scroll">
+          <table class="data-table" id="exitsTable">
+            <thead><tr><th>Holding</th><th style="text-align:right;">Change (%)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="tradeActivityCard" class="card" style="display:none;">
     <div class="card-head">
       <div>
