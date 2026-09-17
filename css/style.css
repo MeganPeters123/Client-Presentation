@@ -188,3 +188,6 @@ table.data-table tr:hover td{ background:var(--surface-2); }
 .listing-input{ padding:3px 4px; border:1px solid var(--border); border-radius:var(--radius-sm);
   background:var(--surface); color:var(--ink-2); font-size:11.5px; }
 .listing-input.overridden{ border-color:var(--accent); color:var(--accent); font-weight:650; }
+.sector-input{ padding:3px 4px; border:1px solid var(--border); border-radius:var(--radius-sm);
+  background:var(--surface); color:var(--ink-2); font-size:11.5px; max-width:180px; }
+.sector-input:focus{ outline:none; border-color:var(--accent); }

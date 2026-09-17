@@ -219,10 +219,46 @@ function renderLookThroughChart(bars, order) {
   });
 }
 
+/* Rand exposure is the number Megan's audience looks for first, so ZAR keeps the SA green
+   wherever it appears; everything else takes the standard palette in weight order. */
+const CURRENCY_COLORS = { ZAR: "#008300", USD: "#2a78d6", GBP: "#4a3aa7", EUR: "#eda100", HKD: "#eb6834" };
+const BREAKDOWN_MUTED = { "Not classified": "#c3c2b7", "Cash & Fixed Income": "#898781", Unknown: "#c3c2b7" };
+
+let breakdownChartInstance = null;
+
+/** rows: [{ key, weight }] as percentages, already sorted. */
+function renderBreakdownChart(rows, by) {
+  const ctx = document.getElementById("breakdownChart").getContext("2d");
+  if (breakdownChartInstance) breakdownChartInstance.destroy();
+  const ink2 = cssVar("--ink-2");
+
+  breakdownChartInstance = new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels: rows.map(r => r.key),
+      datasets: [{
+        data: rows.map(r => r.weight),
+        backgroundColor: rows.map((r, i) =>
+          BREAKDOWN_MUTED[r.key] || (by === "ccy" ? CURRENCY_COLORS[r.key] : null) ||
+          LOOKTHROUGH_COLORS[r.key] || PALETTE[i % PALETTE.length]),
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: "58%",
+      plugins: {
+        legend: { position: "right", labels: { color: ink2, boxWidth: 11, font: { size: 11 } } },
+        tooltip: { callbacks: { label: c => `${c.label}: ${c.parsed.toFixed(1)}%` } }
+      }
+    }
+  });
+}
+
 function destroyCharts() {
   if (aumChartInstance) { aumChartInstance.destroy(); aumChartInstance = null; }
   if (allocationChartInstance) { allocationChartInstance.destroy(); allocationChartInstance = null; }
   if (fundTrendChartInstance) { fundTrendChartInstance.destroy(); fundTrendChartInstance = null; }
   if (tradeActivityChartInstance) { tradeActivityChartInstance.destroy(); tradeActivityChartInstance = null; }
   if (lookThroughChartInstance) { lookThroughChartInstance.destroy(); lookThroughChartInstance = null; }
+  if (breakdownChartInstance) { breakdownChartInstance.destroy(); breakdownChartInstance = null; }
 }

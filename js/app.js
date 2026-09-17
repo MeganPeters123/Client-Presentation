@@ -717,6 +717,8 @@ function renderAllocationSection() {
 ["lookThroughFund", "lookThroughPeriod", "lookThroughExpand"].forEach(id => {
   document.getElementById(id).addEventListener("change", renderLookThroughSection);
 });
+// the breakdown card reads the same in-house fund setting, so it has to follow it
+document.getElementById("lookThroughExpand").addEventListener("change", renderBreakdownSection);
 
 function renderLookThroughSection() {
   const card = document.getElementById("lookThroughCard");
@@ -861,6 +863,107 @@ function renderLookThroughPositions(positions) {
   });
   tbody.querySelectorAll(".listing-input").forEach(sel => {
     sel.addEventListener("change", () => { setListingOverride(sel.dataset.ticker, sel.value); refresh(); });
+  });
+}
+
+/* ---------- Exposure Breakdown (currency / sector) ---------- */
+let breakdownBy = "ccy";
+
+document.querySelectorAll("#breakdownBySeg button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#breakdownBySeg button").forEach(b => b.classList.toggle("active", b === btn));
+    breakdownBy = btn.dataset.val;
+    renderBreakdownSection();
+  });
+});
+["breakdownFund", "breakdownPeriod"].forEach(id => {
+  document.getElementById(id).addEventListener("change", renderBreakdownSection);
+});
+
+function renderBreakdownSection() {
+  const card = document.getElementById("breakdownCard");
+  const funds = listFundsWithHoldings();
+  if (!funds.length) { card.style.display = "none"; return; }
+  card.style.display = "block";
+
+  const fundSel = document.getElementById("breakdownFund");
+  const prevFund = fundSel.value;
+  fundSel.innerHTML = funds.map(f => `<option value="${escAttr(f)}">${f}</option>`).join("");
+  fundSel.value = funds.includes(prevFund) ? prevFund : funds[0];
+  const fund = fundSel.value;
+
+  const months = listHoldingMonthsForFund(fund);
+  const perSel = document.getElementById("breakdownPeriod");
+  const prevPeriod = perSel.value;
+  perSel.innerHTML = months.map(m => `<option value="${m}">${monthLabelFromKey(m)}</option>`).join("");
+  perSel.value = months.includes(prevPeriod) ? prevPeriod : months[0];
+  const month = perSel.value;
+  if (!month) { card.style.display = "none"; return; }
+
+  // the same in-house fund treatment as the look-through, so the two cards never disagree
+  const expandFunds = document.getElementById("lookThroughExpand").value === "expand";
+  const bd = computeBreakdown(fund, month, { by: breakdownBy, expandFunds });
+
+  document.getElementById("breakdownKeyCol").textContent = breakdownBy === "ccy" ? "Currency" : "Sector";
+  document.getElementById("breakdownSubtitle").textContent =
+    `${fund} — ${monthLabelFromKey(month)}, by ${breakdownBy === "ccy" ? "trading currency" : "GICS sector"}` +
+    (expandFunds ? " (in-house funds looked through)" : "");
+
+  const colorFor = (k, i) => BREAKDOWN_MUTED[k] ||
+    (breakdownBy === "ccy" ? CURRENCY_COLORS[k] : null) || LOOKTHROUGH_COLORS[k] || PALETTE[i % PALETTE.length];
+  document.querySelector("#breakdownTable tbody").innerHTML = bd.rows.map((r, i) => `
+    <tr>
+      <td><span class="legend-swatch" style="display:inline-block;background:${colorFor(r.key, i)};margin-right:7px;"></span>${r.key}</td>
+      <td class="num">${r.weight.toFixed(1)}%</td>
+    </tr>`).join("");
+  document.querySelector("#breakdownTable tfoot").innerHTML =
+    `<tr><th>Total</th><th style="text-align:right;">${bd.total.toFixed(1)}%</th></tr>`;
+  renderBreakdownChart(bd.rows, breakdownBy);
+
+  // currency is the trading currency of the line, which is not the same thing as where the
+  // business earns — say so, rather than letting the chart imply more than it knows
+  document.getElementById("breakdownNote").textContent = breakdownBy === "ccy"
+    ? "Currency of the listing each position trades in, cash included. For where the revenue is earned, see the look-through above."
+    : (bd.unclassified.length
+      ? `${bd.unclassified.length} position(s) have no sector yet — set them below.`
+      : "Every equity position has a sector.");
+
+  renderSectorAssignment(bd.unclassified);
+}
+
+function renderSectorAssignment(unclassified) {
+  const wrap = document.getElementById("sectorAssignWrap");
+  if (breakdownBy !== "sector") { wrap.style.display = "none"; return; }
+
+  // once nothing is unclassified, keep the panel available for changing a call already made
+  const assigned = Object.keys(saIncStore.sector);
+  if (!unclassified.length && !assigned.length) { wrap.style.display = "none"; return; }
+  wrap.style.display = "block";
+  document.getElementById("sectorAssignTitle").textContent = unclassified.length
+    ? `${unclassified.length} position${unclassified.length > 1 ? "s" : ""} with no sector`
+    : "Sectors you have set";
+
+  const rows = unclassified.length ? unclassified
+    : assigned.map(t => ({ name: t, ticker: t, weight: 0 }));
+  const tbody = document.querySelector("#sectorAssignTable tbody");
+  tbody.innerHTML = rows.map(p => {
+    const t = escAttr(p.ticker || p.name);
+    const cur = lookupSector(p.ticker).sector || "";
+    const opts = ["", ...GICS_SECTORS]
+      .map(s => `<option value="${escAttr(s)}"${s === cur ? " selected" : ""}>${s || "— pick —"}</option>`).join("");
+    return `<tr>
+      <td>${p.name}</td>
+      <td class="num">${p.weight ? p.weight.toFixed(2) + "%" : "—"}</td>
+      <td class="num"><select class="sector-input" data-ticker="${t}">${opts}</select></td>
+    </tr>`;
+  }).join("");
+
+  tbody.querySelectorAll(".sector-input").forEach(sel => {
+    sel.addEventListener("change", () => {
+      setManualSector(sel.dataset.ticker, sel.value);
+      renderSaIncomeSourceList();
+      renderBreakdownSection();
+    });
   });
 }
 
@@ -1144,6 +1247,7 @@ function renderAll() {
   renderAllocationSection();
   renderSaIncomeSourceList();
   renderLookThroughSection();
+  renderBreakdownSection();
   renderHoldingsSections();
   renderTradeActivitySection();
   renderTradesSection();

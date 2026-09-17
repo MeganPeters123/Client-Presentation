@@ -24,8 +24,19 @@ const SEGMENT_TO_BUCKET = {
   "SA Fixed Income": "SA Fixed Income",
   "Global Fixed Income": "Offshore Fixed Income"
 };
-const NON_EQUITY_CATEGORY = /^(cash|bond|money)/i;
 const FUND_CATEGORY = /collective investment|unit trust|fund of fund/i;
+
+/** Cash and fixed income are taken from the segments, so the position rows behind them must
+ *  be skipped or they land in the total twice. The three source formats word these categories
+ *  quite differently — "Cash" and "Bonds" from the custodian HTML, "SA Fixed Income" from the
+ *  flat CSV, "Domestic (South African rand MMA)" from the IPD extract — so matching only one
+ *  format's wording double-counts every fund on the others. */
+const NON_EQUITY_CATEGORY = /cash|bond|money market|fixed income|\bMMA\b|deposit|liquidity/i;
+
+function isNonEquityHolding(h) {
+  const c = h.category || "";
+  return NON_EQUITY_CATEGORY.test(c) || Object.prototype.hasOwnProperty.call(SEGMENT_TO_BUCKET, c);
+}
 
 const LOOKTHROUGH_BUCKETS = [
   "SA Inc", "Quasi-Offshore", "Offshore Equity",
@@ -42,10 +53,21 @@ const ALLOCATION_ORDER = [
   "SA Cash", "Offshore Cash", "SA Fixed Income", "Offshore Fixed Income"
 ];
 
+/** The eleven GICS sectors. No holdings file we receive carries GICS — the IPD extracts
+ *  carry ICB ("Basic Materials", "Travel and Leisure"), which is a different scheme, and the
+ *  custodian HTML exports carry no sector at all. So the mapping is the firm's own: a Sector
+ *  column on the research tab if there is one, otherwise set per holding here. */
+const GICS_SECTORS = [
+  "Energy", "Materials", "Industrials", "Consumer Discretionary", "Consumer Staples",
+  "Health Care", "Financials", "Information Technology", "Communication Services",
+  "Utilities", "Real Estate"
+];
+
 /* ---------- the SA-revenue map ---------- */
 
 function loadSaIncStore() {
-  const empty = { source: {}, manual: {}, funds: {}, listing: {}, fileName: "", sheetName: "", loadedAt: null };
+  const empty = { source: {}, manual: {}, funds: {}, listing: {}, sector: {}, sectorSource: {},
+                  fileName: "", sheetName: "", loadedAt: null };
   try {
     const raw = localStorage.getItem(SAINC_STORAGE_KEY);
     if (!raw) return empty;
@@ -135,6 +157,21 @@ function setListingOverride(ticker, listing) {
   persistSaIncStore();
 }
 
+/** Sector for a ticker: what you set here first, then a Sector column off the research tab. */
+function lookupSector(ticker) {
+  const keys = [rawTicker(ticker), normTicker(ticker)];
+  for (const k of keys) if (k && saIncStore.sector[k]) return { sector: saIncStore.sector[k], origin: "manual" };
+  for (const k of keys) if (k && saIncStore.sectorSource[k]) return { sector: saIncStore.sectorSource[k], origin: "source" };
+  return { sector: null, origin: null };
+}
+
+function setManualSector(ticker, sector) {
+  const k = rawTicker(ticker);
+  if (!k) return;
+  if (sector) saIncStore.sector[k] = sector; else delete saIncStore.sector[k];
+  persistSaIncStore();
+}
+
 function setFundLookThrough(ticker, fundName) {
   const k = rawTicker(ticker);
   if (!k) return;
@@ -162,15 +199,23 @@ async function importSaIncFromFile(file) {
   const header = (rows[0] || []).map(h => String(h == null ? "" : h).toLowerCase().replace(/[^a-z0-9]/g, ""));
   const tickerCol = header.findIndex(h => h.includes("ticker") || h === "code" || h === "share");
   const pctCol = header.findIndex(h => h.includes("sainc") || h.includes("sarevenue") || h.includes("sa"));
+  // optional: add a Sector column to the same tab and the sector split fills itself in
+  const sectorCol = header.findIndex(h => h.includes("sector") || h.includes("gics"));
   if (tickerCol < 0 || pctCol < 0) {
     throw new Error(`could not find a ticker and a "% SA Inc" column on the "${sheet}" tab`);
   }
 
   const source = {};
+  const sectorSource = {};
   const suspicious = [];
   rows.slice(1).forEach(r => {
     const key = rawTicker(r[tickerCol]);
     if (!key) return;
+    if (sectorCol >= 0 && r[sectorCol]) {
+      const s = String(r[sectorCol]).trim();
+      // accept any spelling the sheet uses, but snap to a GICS name where it matches
+      sectorSource[key] = GICS_SECTORS.find(g => g.toLowerCase() === s.toLowerCase()) || s;
+    }
     const v = r[pctCol];
     if (typeof v === "number") {
       // the tab holds fractions (0.9 = 90% SA-derived); anything above 1 is a data-entry slip
@@ -183,11 +228,12 @@ async function importSaIncFromFile(file) {
   });
 
   saIncStore.source = source;
+  saIncStore.sectorSource = sectorSource;
   saIncStore.fileName = file.name;
   saIncStore.sheetName = sheet;
   saIncStore.loadedAt = new Date().toISOString();
   persistSaIncStore();
-  return { ...saIncCounts(), sheet, suspicious };
+  return { ...saIncCounts(), sheet, suspicious, sectors: Object.keys(sectorSource).length };
 }
 
 function clearSaIncSource() {
@@ -271,7 +317,7 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
     });
 
     (snap.holdings || []).forEach(h => {
-      if (NON_EQUITY_CATEGORY.test(h.category || "")) return;   // counted via segments above
+      if (isNonEquityHolding(h)) return;   // counted via segments above
       const w = scale * (h.pct || 0);
       if (!w) return;
 
@@ -318,5 +364,66 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
     expanded,
     unresolvedFunds,
     coverage: equityWeight ? (mappedWeight / equityWeight) * 100 : 0
+  };
+}
+
+/* ---------- other ways of cutting the same holdings ---------- */
+
+/** Currency and sector splits over *every* position, cash included — unlike the asset
+ *  allocation, where cash comes from the segments. Cash is where most of the rand exposure
+ *  sits, so leaving it out would understate ZAR by roughly a tenth of the fund.
+ *
+ *  `by` is "ccy" or "sector". Returns { rows, unclassified, total } with rows as percentages
+ *  of the fund, plus the positions behind any unclassified weight so they can be set. */
+function computeBreakdown(fund, monthKey, { by = "ccy", expandFunds = true } = {}) {
+  const groups = new Map();
+  const unclassified = new Map();
+  const fundsWithHoldings = listFundsWithHoldings();
+
+  function walk(fundName, month, scale, visited) {
+    const snap = getFundSnapshotAtOrBefore(fundName, month, null);
+    if (!snap || !snap.total) return false;
+    const stamp = `${fundName}|${snap.period}`;
+    if (visited.has(stamp)) return false;
+    visited.add(stamp);
+
+    (snap.holdings || []).forEach(h => {
+      const w = scale * (h.pct || 0);
+      if (!w) return;
+      if (isFundHolding(h) && expandFunds) {
+        const target = resolveFundForHolding(h, fundsWithHoldings);
+        if (target && walk(target, month, scale * (h.pct || 0) / 100, visited)) return;
+      }
+      let key;
+      if (by === "sector") {
+        // cash and bonds have no sector; calling them "unclassified" would hide the fact
+        // that they are simply not equity, so they get their own row
+        if (isNonEquityHolding(h)) key = "Cash & Fixed Income";
+        else {
+          key = lookupSector(h.ticker).sector;
+          if (!key) {
+            const uk = rawTicker(h.ticker) || h.name;
+            const prev = unclassified.get(uk);
+            if (prev) prev.weight += w;
+            else unclassified.set(uk, { name: h.name, ticker: h.ticker, weight: w });
+            key = "Not classified";
+          }
+        }
+      } else {
+        key = String(h.ccy || "").trim().toUpperCase() || "Unknown";
+      }
+      groups.set(key, (groups.get(key) || 0) + w);
+    });
+    return true;
+  }
+
+  walk(fund, monthKey, 1, new Set());
+  const rows = [...groups.entries()]
+    .map(([key, weight]) => ({ key, weight }))
+    .sort((a, b) => b.weight - a.weight);
+  return {
+    rows,
+    unclassified: [...unclassified.values()].sort((a, b) => b.weight - a.weight),
+    total: rows.reduce((s, r) => s + r.weight, 0)
   };
 }

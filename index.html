@@ -235,6 +235,49 @@
     </div>
   </div>
 
+  <div id="breakdownCard" class="card" style="display:none;">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Exposure Breakdown</div>
+        <div class="card-subtitle" id="breakdownSubtitle">The same holdings cut by currency or by sector</div>
+      </div>
+      <div class="funds-controls">
+        <div class="seg" id="breakdownBySeg">
+          <button class="active" data-val="ccy">Currency</button>
+          <button data-val="sector">Sector</button>
+        </div>
+        <select id="breakdownFund"></select>
+        <select id="breakdownPeriod"></select>
+      </div>
+    </div>
+    <div class="grid2">
+      <div>
+        <div class="table-scroll">
+          <table class="data-table" id="breakdownTable">
+            <thead><tr><th id="breakdownKeyCol">Currency</th><th style="text-align:right;">% of Fund</th></tr></thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+        <div class="card-subtitle" id="breakdownNote" style="margin-top:10px;"></div>
+      </div>
+      <div class="chart-wrap donut"><canvas id="breakdownChart"></canvas></div>
+    </div>
+    <div id="sectorAssignWrap" style="display:none; margin-top:18px; border-top:1px solid var(--border); padding-top:14px;">
+      <div class="card-subtitle" style="margin-bottom:8px;" id="sectorAssignTitle">Positions with no sector</div>
+      <div class="table-scroll" style="max-height:260px;">
+        <table class="data-table" id="sectorAssignTable">
+          <thead><tr><th>Holding</th><th style="text-align:right;">Weight</th><th style="text-align:right;">GICS sector</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="card-subtitle" style="margin-top:8px;">
+        Set these once and they are remembered. Add a <strong>Sector</strong> column to the
+        "SA Income Categories" tab and they fill in from there instead.
+      </div>
+    </div>
+  </div>
+
   <div id="holdingsCard" class="card" style="display:none;">
     <div class="card-head">
       <div>
