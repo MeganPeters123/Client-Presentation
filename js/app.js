@@ -900,6 +900,17 @@ function renderBreakdownSection() {
   const month = perSel.value;
   if (!month) { card.style.display = "none"; return; }
 
+  // Sector is parked until there is a mapping to drive it — no file we receive carries GICS,
+  // and an all-"Not classified" chart is just noise. Add a Sector column to the research tab
+  // and the choice reappears on its own.
+  const haveSectors = Object.keys(saIncStore.sectorSource).length + Object.keys(saIncStore.sector).length > 0;
+  document.getElementById("breakdownBySeg").style.display = haveSectors ? "" : "none";
+  if (!haveSectors && breakdownBy === "sector") {
+    breakdownBy = "ccy";
+    document.querySelectorAll("#breakdownBySeg button")
+      .forEach(b => b.classList.toggle("active", b.dataset.val === "ccy"));
+  }
+
   // the same in-house fund treatment as the look-through, so the two cards never disagree
   const expandFunds = document.getElementById("lookThroughExpand").value === "expand";
   const bd = computeBreakdown(fund, month, { by: breakdownBy, expandFunds });
