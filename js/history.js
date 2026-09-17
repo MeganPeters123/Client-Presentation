@@ -213,8 +213,9 @@ function computeTopHoldings(fund, currentMonth, priorMonth, n = 10) {
     });
 }
 
-/** Positions opened since the comparison period, and those closed out of it. */
-function computePortfolioChanges(fund, currentMonth, priorMonth, minPct = 0.01) {
+/** Positions opened since the comparison period, and those closed out of it.
+ *  minPct of 0 returns everything, including moves that round to 0.0%. */
+function computePortfolioChanges(fund, currentMonth, priorMonth, minPct = 0) {
   const now = holdingsByKey(fund, currentMonth);
   const before = holdingsByKey(fund, priorMonth);
 

@@ -738,17 +738,39 @@ function renderHoldingsSections() {
 }
 
 function renderPortfolioChanges(fund, current, prior) {
-  const { entries, exits } = computePortfolioChanges(fund, current, prior);
-  document.getElementById("portfolioChangesSubtitle").textContent =
-    `${fund} — opened and closed between ${monthLabelFromKey(prior)} and ${monthLabelFromKey(current)}`;
+  const threshold = parseFloat(document.getElementById("changesThreshold").value) || 0;
+  const all = computePortfolioChanges(fund, current, prior);
+  const shown = {
+    entries: all.entries.filter(h => Math.abs(h.change) >= threshold),
+    exits: all.exits.filter(h => Math.abs(h.change) >= threshold)
+  };
+  const hidden = (all.entries.length - shown.entries.length) + (all.exits.length - shown.exits.length);
 
+  document.getElementById("portfolioChangesSubtitle").textContent =
+    `${fund} — opened and closed between ${monthLabelFromKey(prior)} and ${monthLabelFromKey(current)}` +
+    // say so explicitly, so a filtered-out position is never silently missing
+    (hidden ? ` · ${hidden} below ${threshold}% hidden` : "");
+
+  // sub-0.1% moves are the reason the cut-off exists — give them enough precision to judge,
+  // rather than rounding a real position down to a meaningless "0.0" (or "-0.00")
+  const fmt = v => {
+    const a = Math.abs(v);
+    return a >= 0.1 ? v.toFixed(1) : a >= 0.01 ? v.toFixed(2) : v.toFixed(4);
+  };
   const rows = (list, cls) => list.length
-    ? list.map(h => `<tr><td>${h.name}</td><td class="num ${cls}">${h.change > 0 ? "+" : ""}${h.change.toFixed(1)}</td></tr>`).join("")
+    ? list.map(h => `<tr><td>${h.name}</td><td class="num ${cls}">${h.change > 0 ? "+" : ""}${fmt(h.change)}</td></tr>`).join("")
     : `<tr><td colspan="2" style="color:var(--ink-muted);">None</td></tr>`;
 
-  document.querySelector("#entriesTable tbody").innerHTML = rows(entries, "delta-up");
-  document.querySelector("#exitsTable tbody").innerHTML = rows(exits, "delta-down");
+  document.querySelector("#entriesTable tbody").innerHTML = rows(shown.entries, "delta-up");
+  document.querySelector("#exitsTable tbody").innerHTML = rows(shown.exits, "delta-down");
 }
+
+document.getElementById("changesThreshold").addEventListener("change", () => {
+  const fund = document.getElementById("holdingsFundSelector").value;
+  const current = document.getElementById("holdingsPeriodB").value;
+  const prior = document.getElementById("holdingsPeriodA").value;
+  if (fund && current && prior) renderPortfolioChanges(fund, current, prior);
+});
 
 /* ---------- Trading Activity (from saved trade history) ---------- */
 // Cash and money-market flows dwarf the equity/bond trading Megan presents on, so they're
