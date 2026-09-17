@@ -31,6 +31,11 @@ document.getElementById("dataPanelHead").addEventListener("click", () => {
   document.getElementById("dataPanel").classList.toggle("collapsed");
 });
 
+/** Fund names and tickers come from uploaded files, so they can't be trusted raw in markup. */
+function escAttr(s) {
+  return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
 /* ---------- toast ---------- */
 let toastTimer = null;
 function showToast(msg) {
@@ -42,7 +47,7 @@ function showToast(msg) {
 }
 
 /* ---------- upload wiring ---------- */
-["aum", "allocation", "trades", "holdings"].forEach(kind => {
+["aum", "allocation", "trades", "holdings", "saincome"].forEach(kind => {
   const slot = document.getElementById("slot-" + kind);
   const input = document.getElementById("file-" + kind);
   slot.addEventListener("click", () => input.click());
@@ -57,6 +62,7 @@ function showToast(msg) {
 
 async function handleUpload(kind, file) {
   if (kind === "holdings") { await handleHoldingsUpload(file); return; }
+  if (kind === "saincome") { await handleSaIncomeUpload(file); return; }
   try {
     const { headers, rows } = await parseFile(file);
     pendingUpload = { kind, headers, rows, fileName: file.name };
@@ -83,6 +89,56 @@ async function handleHoldingsUpload(file) {
     console.error(err);
     showToast("Could not read that file: " + err.message);
   }
+}
+
+/* ---------- SA revenue split (research workbook) ---------- */
+async function handleSaIncomeUpload(file) {
+  try {
+    const res = await importSaIncFromFile(file);
+    renderSaIncomeSourceList();
+    renderLookThroughSection();
+    showToast(`SA revenue split loaded — ${res.valued} of ${res.tickers} tickers researched`);
+    // a value above 100% is almost certainly a stray decimal, and would multiply that
+    // company's SA weighting on a client slide — say so rather than dropping it silently
+    if (res.suspicious.length) {
+      const list = res.suspicious.map(s => `${s.ticker} (${s.value})`).join(", ");
+      console.warn("Ignored SA revenue percentages above 100%:", res.suspicious);
+      setTimeout(() => showToast(`Ignored ${res.suspicious.length} value(s) above 100%: ${list}`), 2800);
+    }
+  } catch (err) {
+    console.error(err);
+    showToast("Could not read that file: " + err.message);
+  }
+}
+
+function renderSaIncomeSourceList() {
+  const slot = document.getElementById("slot-saincome");
+  const list = document.getElementById("saIncomeSourceList");
+  const status = document.getElementById("status-saincome");
+  const counts = saIncCounts();
+  if (!counts.tickers && !counts.manual && !counts.listing) {
+    slot.classList.remove("loaded");
+    status.textContent = "";
+    list.innerHTML = "";
+    return;
+  }
+  slot.classList.add("loaded");
+  status.textContent = `${counts.valued} of ${counts.tickers} researched`;
+  const chip = (label, n, clear, title) =>
+    `<div class="source-chip"><span>${label}</span><span class="n">${n}</span>
+       <span class="rm" data-clear="${clear}" title="${title}">✕</span></div>`;
+  list.innerHTML =
+    (saIncStore.fileName ? chip(saIncStore.sheetName || saIncStore.fileName, counts.tickers, "source", "Remove this file") : "") +
+    (counts.manual ? chip("Your revenue splits", counts.manual, "manual", "Clear all manual revenue splits") : "") +
+    (counts.listing ? chip("Your listing calls", counts.listing, "listing", "Clear all listing overrides") : "");
+  list.querySelectorAll(".rm").forEach(el => el.addEventListener("click", ev => {
+    ev.stopPropagation();
+    if (el.dataset.clear === "source") clearSaIncSource();
+    else if (el.dataset.clear === "manual") Object.keys(saIncStore.manual).forEach(clearManualSaInc);
+    else Object.keys(saIncStore.listing).forEach(t => setListingOverride(t, null));
+    renderSaIncomeSourceList();
+    renderLookThroughSection();
+  }));
 }
 
 function removeFundSnapshot(fundName) {
@@ -657,6 +713,155 @@ function renderAllocationSection() {
   renderAllocationChart(segments);
 }
 
+/* ---------- Asset Allocation look-through ---------- */
+["lookThroughFund", "lookThroughPeriod", "lookThroughExpand"].forEach(id => {
+  document.getElementById(id).addEventListener("change", renderLookThroughSection);
+});
+
+function renderLookThroughSection() {
+  const card = document.getElementById("lookThroughCard");
+  const empty = document.getElementById("lookThroughEmpty");
+  const body = document.getElementById("lookThroughBody");
+  const funds = listFundsWithHoldings();
+  if (!funds.length) { card.style.display = "none"; return; }
+  card.style.display = "block";
+
+  const fundSel = document.getElementById("lookThroughFund");
+  const prevFund = fundSel.value;
+  fundSel.innerHTML = funds.map(f => `<option value="${escAttr(f)}">${f}</option>`).join("");
+  fundSel.value = funds.includes(prevFund) ? prevFund : funds[0];
+  const fund = fundSel.value;
+
+  const months = listHoldingMonthsForFund(fund);      // newest first
+  const perSel = document.getElementById("lookThroughPeriod");
+  const prevPeriod = perSel.value;
+  perSel.innerHTML = months.map(m => `<option value="${m}">${monthLabelFromKey(m)}</option>`).join("");
+  perSel.value = months.includes(prevPeriod) ? prevPeriod : months[0];
+  const month = perSel.value;
+
+  if (!saIncCounts().tickers && !saIncCounts().manual) {
+    empty.textContent = "Load the SA Revenue Split workbook above to build the look-through.";
+    empty.style.display = "block"; body.style.display = "none";
+    return;
+  }
+  if (!month) {
+    empty.textContent = `No saved holdings for ${fund}.`;
+    empty.style.display = "block"; body.style.display = "none";
+    return;
+  }
+  empty.style.display = "none"; body.style.display = "block";
+
+  const expandFunds = document.getElementById("lookThroughExpand").checked;
+  const lt = computeLookThrough(fund, month, { expandFunds });
+  const listed = lt.listed;
+
+  document.getElementById("lookThroughSubtitle").textContent =
+    `${fund} — ${monthLabelFromKey(month)} · ${lt.coverage.toFixed(0)}% of equity has a researched revenue split`;
+
+  renderLookThroughChart(
+    [{ label: "Listed", buckets: listed }, { label: "Look-through", buckets: lt.buckets }],
+    ALLOCATION_ORDER
+  );
+
+  // one row per category on either side, so a bucket that only exists after the look-through
+  // (Quasi-Offshore) still lines up against the listed column it came out of
+  const rowKeys = ALLOCATION_ORDER
+    .filter(k => (listed[k] || 0) > 0.005 || (lt.buckets[k] || 0) > 0.005);
+  const cell = v => (v > 0.005 ? v.toFixed(1) + "%" : "—");
+  document.querySelector("#lookThroughTable tbody").innerHTML = rowKeys.map((k, i) => `
+    <tr>
+      <td><span class="legend-swatch" style="display:inline-block;background:${LOOKTHROUGH_COLORS[k] || colorForCategory(k, i)};margin-right:7px;"></span>${k}</td>
+      <td class="num">${cell(listed[k] || 0)}</td>
+      <td class="num">${cell(lt.buckets[k] || 0)}</td>
+    </tr>`).join("");
+  const sum = o => Object.values(o).reduce((s, v) => s + v, 0);
+  document.querySelector("#lookThroughTable tfoot").innerHTML = `
+    <tr><th>Total</th>
+      <th style="text-align:right;">${sum(listed).toFixed(1)}%</th>
+      <th style="text-align:right;">${sum(lt.buckets).toFixed(1)}%</th></tr>`;
+
+  const note = document.getElementById("lookThroughExpandedNote");
+  const parts = [];
+  if (lt.expanded.length) {
+    parts.push("Looked through to underlying holdings: " +
+      lt.expanded.map(e => `${e.fund} (${e.weight.toFixed(1)}%)`).join(", ") + ".");
+  }
+  if (lt.unresolvedFunds.length) {
+    parts.push("Held as a single line — no saved holdings for " +
+      lt.unresolvedFunds.map(e => `${e.name} (${e.weight.toFixed(1)}%)`).join(", ") + ".");
+  }
+  // the listed bar reflects the fund look-through and any listing calls made below, so say
+  // where it has moved away from what the custodian statement itself reported
+  const custodian = computeCustodianAllocation(fund, month);
+  const drift = (listed["SA Equity"] || 0) - (custodian["SA Equity"] || 0);
+  if (Math.abs(drift) > 0.005) {
+    parts.push(`The custodian reports SA-listed equity at ${custodian["SA Equity"].toFixed(1)}%; ` +
+      `shown here as ${listed["SA Equity"].toFixed(1)}% (${drift > 0 ? "+" : ""}${drift.toFixed(1)}).`);
+  }
+  note.textContent = parts.join(" ");
+
+  renderLookThroughPositions(lt.positions);
+}
+
+document.getElementById("positionsOnlyUnset").addEventListener("change", renderLookThroughSection);
+
+/** Every equity position, with the two inputs that decide its split. A position the research
+ *  workbook has no number for currently counts as 0% SA-derived — an assumption, not a
+ *  neutral — so it is flagged and can be set by hand right here. */
+function renderLookThroughPositions(positions) {
+  const tbody = document.querySelector("#positionsTable tbody");
+  const onlyUnset = document.getElementById("positionsOnlyUnset").checked;
+  const unset = positions.filter(p => p.origin !== "source" && p.origin !== "manual");
+  const shown = onlyUnset ? unset : positions;
+
+  document.getElementById("positionsTitle").textContent = unset.length
+    ? `${positions.length} equity positions · ${unset.length} with no revenue split`
+    : `${positions.length} equity positions`;
+
+  if (!shown.length) {
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--ink-muted);">Nothing to show.</td></tr>`;
+    return;
+  }
+  const chip = (text, fg, bg) =>
+    `<span class="chip" style="background:${bg};color:${fg};margin-left:6px;">${text}</span>`;
+
+  tbody.innerHTML = shown.map(p => {
+    const t = escAttr(p.ticker || p.name);
+    // "blank" means the workbook lists the ticker but nobody has researched it yet — worth
+    // telling apart from a holding the workbook has never heard of, which is the new purchase
+    const flag =
+      p.origin === "manual" ? chip("yours", "var(--accent)", "var(--accent-wash)") :
+      p.origin === "blank" ? chip("not researched", "var(--ink-muted)", "var(--surface-2)") :
+      p.origin === null ? chip("new", "var(--bad)", "rgba(208,59,59,0.12)") : "";
+    const val = (p.origin === "source" || p.origin === "manual") ? (p.saInc * 100).toFixed(0) : "";
+    const sel = o => (p.listing === o ? " selected" : "");
+    return `<tr>
+      <td>${p.name}${flag}</td>
+      <td class="num">${p.weight.toFixed(2)}%</td>
+      <td class="num"><input type="number" class="sainc-input" data-ticker="${t}"
+           min="0" max="100" step="1" placeholder="0" value="${val}"></td>
+      <td class="num"><select class="listing-input${p.listingOverridden ? " overridden" : ""}" data-ticker="${t}"
+           title="${p.listingOverridden ? "Overridden by you" : "From the trading currency (" + escAttr(p.ccy || "?") + ")"}">
+        <option value="SA"${sel("SA")}>SA</option>
+        <option value="Offshore"${sel("Offshore")}>Offshore</option>
+      </select></td>
+    </tr>`;
+  }).join("");
+
+  const refresh = () => { renderSaIncomeSourceList(); renderLookThroughSection(); };
+  tbody.querySelectorAll(".sainc-input").forEach(input => {
+    input.addEventListener("change", () => {
+      const raw = input.value.trim();
+      if (raw === "") clearManualSaInc(input.dataset.ticker);
+      else setManualSaInc(input.dataset.ticker, parseFloat(raw) / 100);
+      refresh();
+    });
+  });
+  tbody.querySelectorAll(".listing-input").forEach(sel => {
+    sel.addEventListener("change", () => { setListingOverride(sel.dataset.ticker, sel.value); refresh(); });
+  });
+}
+
 /* ---------- Top 10 Holdings + Portfolio Changes ---------- */
 ["holdingsFundSelector", "holdingsPeriodA", "holdingsPeriodB"].forEach(id => {
   document.getElementById(id).addEventListener("change", renderHoldingsSections);
@@ -935,6 +1140,8 @@ function renderAll() {
   renderAumSection();
   renderFundsSection();
   renderAllocationSection();
+  renderSaIncomeSourceList();
+  renderLookThroughSection();
   renderHoldingsSections();
   renderTradeActivitySection();
   renderTradesSection();

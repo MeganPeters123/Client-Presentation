@@ -59,6 +59,14 @@
           <div class="source-list" id="holdingsSourceList"></div>
           <input type="file" id="file-holdings" accept=".csv,.xlsx,.xls,.htm,.html">
         </div>
+        <div class="upload-slot" id="slot-saincome" data-kind="saincome">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <h3>SA Revenue Split</h3>
+          <p>The analyst workbook's "SA Income Categories" tab — ticker plus % of revenue earned in SA. Drives the look-through allocation.</p>
+          <div class="status" id="status-saincome"></div>
+          <div class="source-list" id="saIncomeSourceList"></div>
+          <input type="file" id="file-saincome" accept=".xlsx,.xlsm,.xls,.csv">
+        </div>
       </div>
       <div class="sample-row">
         <a href="sample-data/aum-history.csv" download>Sample AUM file</a> &nbsp;·&nbsp;
@@ -161,6 +169,67 @@
         </div>
       </div>
       <div class="chart-wrap donut"><canvas id="allocationChart"></canvas></div>
+    </div>
+  </div>
+
+  <div id="lookThroughCard" class="card" style="display:none;">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Asset Allocation — Look-Through</div>
+        <div class="card-subtitle" id="lookThroughSubtitle">Equity split by where the revenue is earned, not where the share is listed</div>
+      </div>
+      <div class="funds-controls">
+        <select id="lookThroughFund"></select>
+        <select id="lookThroughPeriod"></select>
+        <label class="inline-check" title="Expand holdings in Aylett's own funds into their underlying positions">
+          <input type="checkbox" id="lookThroughExpand" checked> Look through in-house funds
+        </label>
+      </div>
+    </div>
+    <div id="lookThroughEmpty" class="empty-hint" style="padding:24px 20px;">
+      Load the SA Revenue Split workbook above to build the look-through.
+    </div>
+    <div id="lookThroughBody" style="display:none;">
+      <div class="chart-wrap" style="height:180px;"><canvas id="lookThroughChart"></canvas></div>
+      <div class="grid2" style="margin-top:18px;">
+        <div>
+          <div class="table-scroll">
+            <table class="data-table" id="lookThroughTable">
+              <thead><tr>
+                <th>Category</th>
+                <th style="text-align:right;" title="As classified on the custodian statement">Listed</th>
+                <th style="text-align:right;">Look-through</th>
+              </tr></thead>
+              <tbody></tbody>
+              <tfoot></tfoot>
+            </table>
+          </div>
+          <div class="card-subtitle" id="lookThroughExpandedNote" style="margin-top:10px;"></div>
+        </div>
+        <div>
+          <div class="funds-controls" style="margin-bottom:8px;">
+            <span class="card-subtitle" id="positionsTitle">Equity positions</span>
+            <div style="flex:1 1 auto;"></div>
+            <label class="inline-check" for="positionsOnlyUnset">
+              <input type="checkbox" id="positionsOnlyUnset"> Only those needing a split
+            </label>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table" id="positionsTable">
+              <thead><tr>
+                <th>Holding</th>
+                <th style="text-align:right;">Weight</th>
+                <th style="text-align:right;" title="Share of revenue earned in South Africa">% SA rev</th>
+                <th style="text-align:right;" title="Where this counts as listed — defaults to the trading currency">Listed</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div class="card-subtitle" style="margin-top:8px;">
+            Anything you set here is your own call — saved in this browser, and it overrides the workbook.
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -324,6 +393,7 @@
 <script src="js/data.js"></script>
 <script src="js/holdings.js"></script>
 <script src="js/history.js"></script>
+<script src="js/lookthrough.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/app.js"></script>
 </body>

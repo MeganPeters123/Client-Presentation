@@ -298,6 +298,8 @@ def write_history(best, out_path):
             # ~60 rows per fund per month and would otherwise dominate the file.
             "holdings": [{
                 "name": h["name"], "ticker": h.get("ticker", ""), "category": h.get("category", ""),
+                # currency decides JSE-listed vs offshore for the look-through split
+                "ccy": h.get("ccy", ""),
                 "pct": round(h.get("pct") or 0.0, 4), "value": round(h.get("value") or 0.0, 2),
             } for h in snap.get("holdings", [])],
             "source": snap["source"],

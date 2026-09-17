@@ -171,9 +171,58 @@ function renderTradeActivityChart(activity, series) {
   });
 }
 
+/* SA-linked buckets in greens, offshore in blues, so the split reads before the legend does. */
+const LOOKTHROUGH_COLORS = {
+  // one green family for the SA block: the listed SA bar splits into SA Inc plus Quasi-Offshore,
+  // so keeping the hue and changing only the shade shows where that block went
+  "SA Equity": "#00560a",
+  "SA Inc": "#008300",
+  "Quasi-Offshore": "#7cc351",
+  "Offshore Equity": "#2a78d6",
+  "SA Cash": "#eda100",
+  "Offshore Cash": "#8FAADC",
+  "SA Fixed Income": "#eb6834",
+  "Offshore Fixed Income": "#4a3aa7"
+};
+
+let lookThroughChartInstance = null;
+
+/** Two stacked bars — listed vs looked-through — so the reallocation is the story.
+ *  bars: [{ label, buckets }]; order: the stacking order across both bars. */
+function renderLookThroughChart(bars, order) {
+  const ctx = document.getElementById("lookThroughChart").getContext("2d");
+  if (lookThroughChartInstance) lookThroughChartInstance.destroy();
+  const ink2 = cssVar("--ink-2"), grid = cssVar("--grid");
+
+  const datasets = order.map((key, i) => ({
+    label: key,
+    data: bars.map(b => b.buckets[key] || 0),
+    backgroundColor: LOOKTHROUGH_COLORS[key] || PALETTE[i % PALETTE.length],
+    borderWidth: 0
+  })).filter(d => d.data.some(v => v > 0.005));
+
+  lookThroughChartInstance = new Chart(ctx, {
+    type: "bar",
+    data: { labels: bars.map(b => b.label), datasets },
+    options: {
+      indexAxis: "y",
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "bottom", labels: { color: ink2, boxWidth: 12, font: { size: 11 } } },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.x.toFixed(1)}%` } }
+      },
+      scales: {
+        x: { stacked: true, max: 100, ticks: { color: ink2, callback: v => v + "%" }, grid: { color: grid } },
+        y: { stacked: true, ticks: { color: ink2, font: { size: 12 } }, grid: { color: "transparent" } }
+      }
+    }
+  });
+}
+
 function destroyCharts() {
   if (aumChartInstance) { aumChartInstance.destroy(); aumChartInstance = null; }
   if (allocationChartInstance) { allocationChartInstance.destroy(); allocationChartInstance = null; }
   if (fundTrendChartInstance) { fundTrendChartInstance.destroy(); fundTrendChartInstance = null; }
   if (tradeActivityChartInstance) { tradeActivityChartInstance.destroy(); tradeActivityChartInstance = null; }
+  if (lookThroughChartInstance) { lookThroughChartInstance.destroy(); lookThroughChartInstance = null; }
 }
