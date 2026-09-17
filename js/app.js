@@ -751,7 +751,7 @@ function renderLookThroughSection() {
   }
   empty.style.display = "none"; body.style.display = "block";
 
-  const expandFunds = document.getElementById("lookThroughExpand").checked;
+  const expandFunds = document.getElementById("lookThroughExpand").value === "expand";
   const lt = computeLookThrough(fund, month, { expandFunds });
   const listed = lt.listed;
 
@@ -831,6 +831,8 @@ function renderLookThroughPositions(positions) {
     // telling apart from a holding the workbook has never heard of, which is the new purchase
     const flag =
       p.origin === "manual" ? chip("yours", "var(--accent)", "var(--accent-wash)") :
+      // a fund held as a single line is not an unresearched company — say which it is
+      p.isFund ? chip("held as a line", "var(--ink-muted)", "var(--surface-2)") :
       p.origin === "blank" ? chip("not researched", "var(--ink-muted)", "var(--surface-2)") :
       p.origin === null ? chip("new", "var(--bad)", "rgba(208,59,59,0.12)") : "";
     const val = (p.origin === "source" || p.origin === "manual") ? (p.saInc * 100).toFixed(0) : "";

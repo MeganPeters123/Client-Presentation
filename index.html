@@ -181,9 +181,11 @@
       <div class="funds-controls">
         <select id="lookThroughFund"></select>
         <select id="lookThroughPeriod"></select>
-        <label class="inline-check" title="Expand holdings in Aylett's own funds into their underlying positions">
-          <input type="checkbox" id="lookThroughExpand" checked> Look through in-house funds
-        </label>
+        <label class="inline-check" for="lookThroughExpand">In-house funds</label>
+        <select id="lookThroughExpand" title="How a holding in one of Aylett's own funds is treated">
+          <option value="expand" selected>looked through to holdings</option>
+          <option value="line">held as a single line</option>
+        </select>
       </div>
     </div>
     <div id="lookThroughEmpty" class="empty-hint" style="padding:24px 20px;">

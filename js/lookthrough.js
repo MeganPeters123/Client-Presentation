@@ -284,6 +284,9 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
         if (expandFunds) unresolvedFunds.push({ name: h.name, ticker: h.ticker, weight: w });
       }
 
+      // reaching here for a fund holding means it is being held as a single line, either by
+      // choice or because we have no saved holdings for it
+      const heldAsLine = isFundHolding(h);
       const look = lookupSaInc(h.ticker);
       const listing = lookupListing(h.ticker, h.ccy);
       equityWeight += w;
@@ -293,7 +296,7 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
       const prev = positions.get(key);
       if (prev) prev.weight += w;
       else positions.set(key, {
-        name: h.name, ticker: h.ticker, ccy: h.ccy, weight: w,
+        name: h.name, ticker: h.ticker, ccy: h.ccy, weight: w, isFund: heldAsLine,
         saInc: look.pct, origin: look.origin,
         listing: listing.listing, listingOverridden: listing.overridden
       });
