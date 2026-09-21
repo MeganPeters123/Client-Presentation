@@ -283,6 +283,29 @@ def report_categories(best, unmapped):
             print(f"   {cat}")
 
 
+def holding_row(h):
+    """One position, kept lean — this is ~60 rows per fund per month and would otherwise
+    dominate the file.
+
+    Nominal and price are carried only where market value fails to describe the position.
+    An index future is marked to market daily, so it sits in the file at a value and weight
+    of zero while still carrying full index exposure; without the contract count and the
+    index level there is nothing downstream to reconstruct that from, and the position is
+    invisible. Every ordinary holding is fully described by its value, so it stays as it was.
+    """
+    row = {
+        "name": h["name"], "ticker": h.get("ticker", ""), "category": h.get("category", ""),
+        # currency decides JSE-listed vs offshore for the look-through split
+        "ccy": h.get("ccy", ""),
+        "pct": round(h.get("pct") or 0.0, 4), "value": round(h.get("value") or 0.0, 2),
+    }
+    nominal, price = h.get("nominal"), h.get("price")
+    if nominal and price and abs(row["value"]) < 1.0:
+        row["nominal"] = nominal
+        row["price"] = price
+    return row
+
+
 def write_history(best, out_path):
     periods = {}
     for (fund, key), snap in best.items():
@@ -296,12 +319,7 @@ def write_history(best, out_path):
             "segments": [{"category": s["category"], "value": round(s["value"], 2)} for s in snap["segments"]],
             # position level, for Top 10 Holdings and Portfolio Changes. Kept lean — this is
             # ~60 rows per fund per month and would otherwise dominate the file.
-            "holdings": [{
-                "name": h["name"], "ticker": h.get("ticker", ""), "category": h.get("category", ""),
-                # currency decides JSE-listed vs offshore for the look-through split
-                "ccy": h.get("ccy", ""),
-                "pct": round(h.get("pct") or 0.0, 4), "value": round(h.get("value") or 0.0, 2),
-            } for h in snap.get("holdings", [])],
+            "holdings": [holding_row(h) for h in snap.get("holdings", [])],
             "source": snap["source"],
             "format": snap["format"],
             "savedAt": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),

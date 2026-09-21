@@ -47,7 +47,7 @@ function showToast(msg) {
 }
 
 /* ---------- upload wiring ---------- */
-["aum", "allocation", "trades", "holdings", "saincome"].forEach(kind => {
+["aum", "allocation", "trades", "holdings", "saincome", "indexweights"].forEach(kind => {
   const slot = document.getElementById("slot-" + kind);
   const input = document.getElementById("file-" + kind);
   slot.addEventListener("click", () => input.click());
@@ -63,6 +63,7 @@ function showToast(msg) {
 async function handleUpload(kind, file) {
   if (kind === "holdings") { await handleHoldingsUpload(file); return; }
   if (kind === "saincome") { await handleSaIncomeUpload(file); return; }
+  if (kind === "indexweights") { await handleIndexWeightsUpload(file); return; }
   try {
     const { headers, rows } = await parseFile(file);
     pendingUpload = { kind, headers, rows, fileName: file.name };
@@ -139,6 +140,47 @@ function renderSaIncomeSourceList() {
     renderSaIncomeSourceList();
     renderLookThroughSection();
   }));
+}
+
+/* ---------- index weights (for active share) ---------- */
+async function handleIndexWeightsUpload(file) {
+  try {
+    const res = await importIndexWeightsFromFile(file);
+    renderIndexWeightsSourceList();
+    renderActiveShareSection();
+    showToast(`Index weights loaded — ${res.months} months, ${res.indices.join(", ")}`);
+  } catch (err) {
+    console.error(err);
+    showToast("Could not read that file: " + err.message);
+  }
+}
+
+function renderIndexWeightsSourceList() {
+  const slot = document.getElementById("slot-indexweights");
+  const list = document.getElementById("indexWeightsSourceList");
+  const status = document.getElementById("status-indexweights");
+  const months = listIndexMonths();
+  if (!months.length) {
+    slot.classList.remove("loaded");
+    status.textContent = "";
+    list.innerHTML = "";
+    return;
+  }
+  slot.classList.add("loaded");
+  status.textContent = `${months.length} month${months.length > 1 ? "s" : ""} loaded`;
+  const codes = [...new Set(months.flatMap(listIndexCodes))];
+  list.innerHTML = `
+    <div class="source-chip">
+      <span>${escAttr(indexWeightsStore.fileName || "index weights")}</span>
+      <span class="n">${codes.join(", ")}</span>
+      <span class="rm" title="Remove">✕</span>
+    </div>`;
+  list.querySelector(".rm").addEventListener("click", ev => {
+    ev.stopPropagation();
+    clearIndexWeights();
+    renderIndexWeightsSourceList();
+    renderActiveShareSection();
+  });
 }
 
 function removeFundSnapshot(fundName) {
@@ -866,6 +908,104 @@ function renderLookThroughPositions(positions) {
   });
 }
 
+/* ---------- Active Share ---------- */
+["activeShareFund", "activeShareIndex", "activeShareOffshore"].forEach(id => {
+  document.getElementById(id).addEventListener("change", renderActiveShareSection);
+});
+
+function renderActiveShareSection() {
+  const card = document.getElementById("activeShareCard");
+  const empty = document.getElementById("activeShareEmpty");
+  const body = document.getElementById("activeShareBody");
+  const funds = listFundsWithHoldings();
+  if (!funds.length) { card.style.display = "none"; return; }
+  card.style.display = "block";
+
+  const fundSel = document.getElementById("activeShareFund");
+  const prevFund = fundSel.value;
+  fundSel.innerHTML = funds.map(f => `<option value="${escAttr(f)}">${f}</option>`).join("");
+  fundSel.value = funds.includes(prevFund) ? prevFund : funds[0];
+  const fund = fundSel.value;
+
+  const months = listIndexMonths();
+  if (!months.length) {
+    empty.textContent = "Load the Index Weights file above to measure active share.";
+    empty.style.display = "block"; body.style.display = "none";
+    return;
+  }
+  const codes = [...new Set(months.flatMap(listIndexCodes))];
+  const idxSel = document.getElementById("activeShareIndex");
+  const prevIdx = idxSel.value;
+  idxSel.innerHTML = codes.map(c => {
+    const info = months.map(m => indexInfo(m, c)).find(Boolean);
+    return `<option value="${c}">${escAttr(info ? info.label : c)}</option>`;
+  }).join("");
+  idxSel.value = codes.includes(prevIdx) ? prevIdx : codes[0];
+
+  const includeOffshore = document.getElementById("activeShareOffshore").checked;
+  const series = activeShareSeries(fund, idxSel.value, { includeOffshore });
+  if (!series.length) {
+    empty.textContent = `No month has both holdings for ${fund} and weights for ${idxSel.value}.`;
+    empty.style.display = "block"; body.style.display = "none";
+    return;
+  }
+  empty.style.display = "none"; body.style.display = "block";
+
+  const latest = series[series.length - 1];
+  document.getElementById("activeShareSubtitle").textContent =
+    `${fund} — ${monthLabelFromKey(latest.month)} vs ${latest.label}` +
+    (includeOffshore ? ", offshore counted as active" : ", SA sleeve only");
+
+  const kpi = (label, value, sub) =>
+    `<div class="kpi"><div class="label">${label}</div><div class="value">${value}</div>
+       <div class="delta">${sub || ""}</div></div>`;
+  const futuresApplied = latest.futures.filter(f => f.applied);
+  document.getElementById("activeShareKpis").innerHTML =
+    kpi("Active share", `${latest.value.toFixed(1)}%`, monthLabelFromKey(latest.month)) +
+    kpi("Offshore", `${latest.offshorePct.toFixed(1)}%`,
+        includeOffshore ? "counted as active" : "excluded from this view") +
+    kpi("Index futures", futuresApplied.length
+        ? futuresApplied.map(f => `${f.contracts > 0 ? "+" : ""}${f.contracts}`).join(", ")
+        : "none", futuresApplied.length ? "spread at index weight" : "no open position");
+
+  // anything that makes the number mean less than it appears to gets said, not hidden
+  const warn = [];
+  if (!latest.dateMatch) {
+    warn.push(`The portfolio is as at ${latest.fundAsOf} but the index weights were struck ` +
+      `${latest.indexAsOf} — not like for like.`);
+  }
+  const unpriced = latest.futures.filter(f => !f.applied);
+  if (unpriced.length) {
+    warn.push(`${unpriced.map(f => f.name).join(", ")} carries no contract count in the saved ` +
+      `history, so its index exposure is not counted. Rebuild the history to pick it up.`);
+  }
+  if (latest.sourceSheet && /capped top40/i.test(latest.sourceSheet) && /SWIX/i.test(latest.label)) {
+    warn.push(`These ${latest.label} weights were sourced from the ${latest.sourceSheet} sheet, ` +
+      `so they are not SWIX weights.`);
+  }
+  document.getElementById("activeShareWarnings").innerHTML = warn.length
+    ? warn.map(w => `<div class="card-subtitle" style="color:var(--bad);margin-bottom:8px;">${w}</div>`).join("")
+    : "";
+
+  renderActiveShareChart(series.map(s => ({ month: s.month, value: s.value, dateMatch: s.dateMatch })));
+
+  document.querySelector("#activeShareTable tbody").innerHTML = latest.rows.slice(0, 14).map(r => `
+    <tr>
+      <td>${r.share}</td>
+      <td class="num">${r.fund ? r.fund.toFixed(2) : "—"}</td>
+      <td class="num">${r.bench ? r.bench.toFixed(2) : "—"}</td>
+      <td class="num ${r.active > 0 ? "delta-up" : "delta-down"}">${r.active > 0 ? "+" : ""}${r.active.toFixed(2)}</td>
+    </tr>`).join("");
+
+  document.querySelector("#activeShareMonths tbody").innerHTML = series.slice().reverse().map(s => `
+    <tr>
+      <td>${monthLabelFromKey(s.month)}</td>
+      <td class="num">${s.value.toFixed(1)}%</td>
+      <td style="font-size:11.5px;color:${s.dateMatch ? "var(--ink-muted)" : "var(--bad)"};">
+        ${s.dateMatch ? s.fundAsOf : `${s.fundAsOf} vs ${s.indexAsOf}`}</td>
+    </tr>`).join("");
+}
+
 /* ---------- Exposure Breakdown (currency / sector) ---------- */
 let breakdownBy = "ccy";
 
@@ -1257,7 +1397,9 @@ function renderAll() {
   renderFundsSection();
   renderAllocationSection();
   renderSaIncomeSourceList();
+  renderIndexWeightsSourceList();
   renderLookThroughSection();
+  renderActiveShareSection();
   renderBreakdownSection();
   renderHoldingsSections();
   renderTradeActivitySection();

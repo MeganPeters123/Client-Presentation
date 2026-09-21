@@ -67,6 +67,14 @@
           <div class="source-list" id="saIncomeSourceList"></div>
           <input type="file" id="file-saincome" accept=".xlsx,.xlsm,.xls,.csv">
         </div>
+        <div class="upload-slot" id="slot-indexweights" data-kind="indexweights">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <h3>Index Weights</h3>
+          <p>"Index Weights - Month End.csv" — month-end constituent weights per index. Drives active share.</p>
+          <div class="status" id="status-indexweights"></div>
+          <div class="source-list" id="indexWeightsSourceList"></div>
+          <input type="file" id="file-indexweights" accept=".csv,.xlsx,.xls">
+        </div>
       </div>
       <div class="sample-row">
         <a href="sample-data/aum-history.csv" download>Sample AUM file</a> &nbsp;·&nbsp;
@@ -229,6 +237,59 @@
           </div>
           <div class="card-subtitle" style="margin-top:8px;">
             Anything you set here is your own call — saved in this browser, and it overrides the workbook.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="activeShareCard" class="card" style="display:none;">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Active Share</div>
+        <div class="card-subtitle" id="activeShareSubtitle">How far the portfolio sits from its index</div>
+      </div>
+      <div class="funds-controls">
+        <select id="activeShareFund"></select>
+        <select id="activeShareIndex" title="Benchmark index"></select>
+        <label class="inline-check" for="activeShareOffshore">
+          <input type="checkbox" id="activeShareOffshore"> Count offshore as active
+        </label>
+      </div>
+    </div>
+    <div id="activeShareEmpty" class="empty-hint" style="padding:24px 20px;">
+      Load the Index Weights file above to measure active share.
+    </div>
+    <div id="activeShareBody" style="display:none;">
+      <div class="kpi-row" id="activeShareKpis" style="grid-template-columns:repeat(3,1fr);"></div>
+      <div id="activeShareWarnings"></div>
+      <div class="chart-wrap" style="height:240px;"><canvas id="activeShareChart"></canvas></div>
+      <div class="grid2" style="margin-top:18px;">
+        <div>
+          <div class="card-subtitle" style="margin-bottom:8px;">Largest active positions</div>
+          <div class="table-scroll">
+            <table class="data-table" id="activeShareTable">
+              <thead><tr>
+                <th>Share</th>
+                <th style="text-align:right;">Fund</th>
+                <th style="text-align:right;">Index</th>
+                <th style="text-align:right;">Active</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <div class="card-subtitle" style="margin-bottom:8px;">By month</div>
+          <div class="table-scroll">
+            <table class="data-table" id="activeShareMonths">
+              <thead><tr>
+                <th>Month</th>
+                <th style="text-align:right;">Active share</th>
+                <th>Dates</th>
+              </tr></thead>
+              <tbody></tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -439,6 +500,7 @@
 <script src="js/holdings.js"></script>
 <script src="js/history.js"></script>
 <script src="js/lookthrough.js"></script>
+<script src="js/activeshare.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/app.js"></script>
 </body>

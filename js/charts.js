@@ -254,6 +254,54 @@ function renderBreakdownChart(rows, by) {
   });
 }
 
+let activeShareChartInstance = null;
+
+/** points: [{ month, value, dateMatch }] oldest first. A month whose portfolio and index
+ *  were struck on different days is drawn hollow, so a caveat cannot hide inside a line. */
+function renderActiveShareChart(points) {
+  const ctx = document.getElementById("activeShareChart").getContext("2d");
+  if (activeShareChartInstance) activeShareChartInstance.destroy();
+  const ink2 = cssVar("--ink-2"), grid = cssVar("--grid"), accent = cssVar("--accent");
+  const surface = cssVar("--surface");
+
+  activeShareChartInstance = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: points.map(p => monthLabelFromKey(p.month)),
+      datasets: [{
+        label: "Active share",
+        data: points.map(p => p.value),
+        borderColor: accent,
+        backgroundColor: accent,
+        pointBackgroundColor: points.map(p => (p.dateMatch ? accent : surface)),
+        pointBorderColor: points.map(p => (p.dateMatch ? accent : cssVar("--bad"))),
+        pointBorderWidth: points.map(p => (p.dateMatch ? 1 : 2)),
+        pointRadius: 4,
+        tension: 0.25,
+        fill: false
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: c => {
+              const p = points[c.dataIndex];
+              return `${c.parsed.y.toFixed(1)}%` + (p.dateMatch ? "" : "  (dates differ)");
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: ink2, maxRotation: 0, autoSkip: true }, grid: { color: "transparent" } },
+        y: { ticks: { color: ink2, callback: v => v + "%" }, grid: { color: grid } }
+      }
+    }
+  });
+}
+
 function destroyCharts() {
   if (aumChartInstance) { aumChartInstance.destroy(); aumChartInstance = null; }
   if (allocationChartInstance) { allocationChartInstance.destroy(); allocationChartInstance = null; }
@@ -261,4 +309,5 @@ function destroyCharts() {
   if (tradeActivityChartInstance) { tradeActivityChartInstance.destroy(); tradeActivityChartInstance = null; }
   if (lookThroughChartInstance) { lookThroughChartInstance.destroy(); lookThroughChartInstance = null; }
   if (breakdownChartInstance) { breakdownChartInstance.destroy(); breakdownChartInstance = null; }
+  if (activeShareChartInstance) { activeShareChartInstance.destroy(); activeShareChartInstance = null; }
 }

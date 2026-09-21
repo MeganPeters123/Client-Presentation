@@ -148,6 +148,11 @@ def parse_custodian_html(path):
             "ccy": cell("CCY"),
             "ticker": cell("Ticker"),
             "isin": cell("ISIN Code"),
+            # a futures position is marked to market daily, so its market value and weight
+            # are both zero while it still carries full index exposure. Nominal and price
+            # are the only record of that exposure, so they have to survive the parse.
+            "nominal": to_number(cell("Original Nominal")),
+            "price": to_number(cell("Market Price /Yield")),
         })
 
     if not flat:
@@ -182,6 +187,7 @@ def parse_custodian_html(path):
             positions.append({
                 "name": r["label"], "ticker": r["ticker"], "ccy": r["ccy"],
                 "category": title_case(current_l2), "pct": pct, "value": (pct / 100.0) * fund_total,
+                "nominal": r["nominal"], "price": r["price"],
             })
 
     segments = []
