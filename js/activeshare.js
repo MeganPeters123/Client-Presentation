@@ -96,10 +96,15 @@ async function importIndexWeightsFromFile(file) {
     const weight = Number(pick(r, "weight"));
     if (!me || !share || !code || !isFinite(weight)) return;
     const month = me.slice(0, 7);
-    const m = (months[month] = months[month] || { asOf: null, indices: {} });
-    // the date the weights were actually struck, which is not always the month-end they
-    // are filed under — it has to survive so it can be checked against the fund's own date
-    m.asOf = isoDate(pick(r, "sourcedate")) || me;
+    const m = (months[month] = months[month] || { monthEnd: null, sourceDate: null, indices: {} });
+    // Two dates, and only one of them means anything. RMB sends a weekly file each Friday
+    // and one monthly file per month; the monthly file is that month's cut whether it
+    // arrives on the last day or a few days later. So the month-end is the as-at date, and
+    // the source date is just when the file happened to land — kept for reference, never
+    // treated as a mismatch. (April 2026 reads 1 May for exactly this reason: the JSE was
+    // shut for Workers' Day, so those are 30 April closes.)
+    m.monthEnd = me;
+    m.sourceDate = isoDate(pick(r, "sourcedate")) || me;
     const idx = (m.indices[code] = m.indices[code] || {
       label: [code, pick(r, "portfolio")].filter(Boolean).join(" "),
       sourceSheet: pick(r, "sourcesheet") || "",
@@ -191,9 +196,9 @@ function fundEquityExposure(fund, month) {
 
 /** Active share for one fund, month and index.
  *
- *  Returns null when there is nothing to compare. `dateMatch` is false when the portfolio
- *  and the index were struck on different days — that is not an active share, so it is
- *  reported rather than quietly averaged over. */
+ *  Returns null when there is nothing to compare. Both sides are that month's cut: the
+ *  lookup is keyed on the month, and the monthly index file is the month's data whenever
+ *  it happens to arrive. */
 function computeActiveShare(fund, month, { indexCode, includeOffshore = false } = {}) {
   const exp = fundEquityExposure(fund, month);
   const info = indexInfo(month, indexCode);
@@ -225,14 +230,14 @@ function computeActiveShare(fund, month, { indexCode, includeOffshore = false } 
 
   // offshore has no benchmark counterpart, so its whole weight is active
   const value = 0.5 * (rows.reduce((s, r) => s + Math.abs(r.active), 0) + offshoreWeight);
-  const indexAsOf = (indexWeightsStore.months[month] || {}).asOf || null;
+  const mrec = indexWeightsStore.months[month] || {};
 
   return {
     value, rows, futures: applied,
     offshorePct: (exp.offshore / exp.total) * 100,
     offshoreWeight,
-    fundAsOf: exp.asOf, indexAsOf,
-    dateMatch: !!(exp.asOf && indexAsOf && exp.asOf === indexAsOf),
+    // both sides are that month's cut by construction — the lookup is keyed on the month
+    fundAsOf: exp.asOf, indexMonthEnd: mrec.monthEnd || null, indexSourceDate: mrec.sourceDate || null,
     sourceSheet: info.sourceSheet, label: info.label
   };
 }

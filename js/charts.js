@@ -256,13 +256,11 @@ function renderBreakdownChart(rows, by) {
 
 let activeShareChartInstance = null;
 
-/** points: [{ month, value, dateMatch }] oldest first. A month whose portfolio and index
- *  were struck on different days is drawn hollow, so a caveat cannot hide inside a line. */
+/** points: [{ month, value }] oldest first. */
 function renderActiveShareChart(points) {
   const ctx = document.getElementById("activeShareChart").getContext("2d");
   if (activeShareChartInstance) activeShareChartInstance.destroy();
   const ink2 = cssVar("--ink-2"), grid = cssVar("--grid"), accent = cssVar("--accent");
-  const surface = cssVar("--surface");
 
   activeShareChartInstance = new Chart(ctx, {
     type: "line",
@@ -273,9 +271,6 @@ function renderActiveShareChart(points) {
         data: points.map(p => p.value),
         borderColor: accent,
         backgroundColor: accent,
-        pointBackgroundColor: points.map(p => (p.dateMatch ? accent : surface)),
-        pointBorderColor: points.map(p => (p.dateMatch ? accent : cssVar("--bad"))),
-        pointBorderWidth: points.map(p => (p.dateMatch ? 1 : 2)),
         pointRadius: 4,
         tension: 0.25,
         fill: false
@@ -285,14 +280,7 @@ function renderActiveShareChart(points) {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: c => {
-              const p = points[c.dataIndex];
-              return `${c.parsed.y.toFixed(1)}%` + (p.dateMatch ? "" : "  (dates differ)");
-            }
-          }
-        }
+        tooltip: { callbacks: { label: c => `${c.parsed.y.toFixed(1)}%` } }
       },
       scales: {
         x: { ticks: { color: ink2, maxRotation: 0, autoSkip: true }, grid: { color: "transparent" } },

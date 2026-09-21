@@ -970,10 +970,6 @@ function renderActiveShareSection() {
 
   // anything that makes the number mean less than it appears to gets said, not hidden
   const warn = [];
-  if (!latest.dateMatch) {
-    warn.push(`The portfolio is as at ${latest.fundAsOf} but the index weights were struck ` +
-      `${latest.indexAsOf} — not like for like.`);
-  }
   const unpriced = latest.futures.filter(f => !f.applied);
   if (unpriced.length) {
     warn.push(`${unpriced.map(f => f.name).join(", ")} carries no contract count in the saved ` +
@@ -987,7 +983,7 @@ function renderActiveShareSection() {
     ? warn.map(w => `<div class="card-subtitle" style="color:var(--bad);margin-bottom:8px;">${w}</div>`).join("")
     : "";
 
-  renderActiveShareChart(series.map(s => ({ month: s.month, value: s.value, dateMatch: s.dateMatch })));
+  renderActiveShareChart(series.map(s => ({ month: s.month, value: s.value })));
 
   document.querySelector("#activeShareTable tbody").innerHTML = latest.rows.slice(0, 14).map(r => `
     <tr>
@@ -997,12 +993,15 @@ function renderActiveShareSection() {
       <td class="num ${r.active > 0 ? "delta-up" : "delta-down"}">${r.active > 0 ? "+" : ""}${r.active.toFixed(2)}</td>
     </tr>`).join("");
 
+  // the index column shows when the monthly file landed, which is information, not a fault:
+  // it is that month's cut either way, so it is never coloured as a problem
   document.querySelector("#activeShareMonths tbody").innerHTML = series.slice().reverse().map(s => `
     <tr>
       <td>${monthLabelFromKey(s.month)}</td>
       <td class="num">${s.value.toFixed(1)}%</td>
-      <td style="font-size:11.5px;color:${s.dateMatch ? "var(--ink-muted)" : "var(--bad)"};">
-        ${s.dateMatch ? s.fundAsOf : `${s.fundAsOf} vs ${s.indexAsOf}`}</td>
+      <td style="font-size:11.5px;color:var(--ink-muted);"
+          title="Portfolio as at ${s.fundAsOf}; index file received ${s.indexSourceDate}">
+        ${s.fundAsOf}</td>
     </tr>`).join("");
 }
 
