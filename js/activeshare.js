@@ -28,7 +28,13 @@ const INDEX_WEIGHTS_KEY = "aum-dashboard-index-weights-v1";
  * against initial margin: R102,240 per ALSI contract in two funds independently, 9.3% of
  * notional at this multiplier. */
 const RAND_PER_INDEX_POINT = 10;
-const FUTURE_INDEX = [[/ALSI/i, "J200"], [/CTOP/i, "J300"]];
+
+/* Which index each contract tracks. DCAP is the capped-SWIX top 40, which is the index the
+ * J430 block carries — and is what the older Balanced positions were written against before
+ * they rolled into CTOP. DTOP is deliberately absent: no index code in the weights export
+ * corresponds to it, so a DTOP contract should report as unsized rather than be quietly
+ * charged to the wrong index. */
+const FUTURE_INDEX = [[/ALSI/i, "J200"], [/CTOP/i, "J300"], [/DCAP/i, "J430"]];
 
 function loadIndexWeights() {
   const empty = { months: {}, fileName: "", loadedAt: null };
