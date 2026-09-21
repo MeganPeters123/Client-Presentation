@@ -148,6 +148,29 @@ function futureIndexCode(h) {
   return hit ? hit[1] : null;
 }
 
+/** A futures line as economic exposure: contracts x the live index price on the file x R10
+ *  a point. Returns null for anything that is not an index future.
+ *
+ *  `notional` is null when the saved history predates the contract count being kept, which
+ *  is worth telling apart from a fund holding no futures at all. */
+function futuresExposure(h) {
+  if (!/derivative/i.test(h.category || "")) return null;
+  const code = futureIndexCode(h);
+  if (!code) return null;
+  const contracts = h.nominal, price = h.price;
+  if (!contracts || !price) return { code, contracts: null, price: null, notional: null };
+  return { code, contracts, price, notional: contracts * price * RAND_PER_INDEX_POINT };
+}
+
+/** The index constituents a future's notional resolves into: [[share, rand], ...].
+ *  A long future is equity exposure bought with cash, so whatever this adds to equity has
+ *  to come off cash or the fund totals more than its own NAV. The caller does that part. */
+function spreadFutureAcrossIndex(code, notional, month) {
+  const info = indexInfo(month, code);
+  if (!info || !notional) return [];
+  return Object.entries(info.weights).map(([share, pct]) => [share, (notional * pct) / 100]);
+}
+
 /** Equity exposure in rand, by JSE code, with offshore and futures kept separate so each
  *  can be reported and toggled rather than silently folded in. */
 function fundEquityExposure(fund, month) {
@@ -160,18 +183,13 @@ function fundEquityExposure(fund, month) {
 
   function walk(holdings, scale) {
     holdings.forEach(h => {
-      const cat = h.category || "";
-      if (/derivative/i.test(cat)) {
-        // value and pct are zero here; nominal x price is the only record of the exposure
-        const code = futureIndexCode(h);
-        if (code && h.nominal && h.price) {
-          futures.push({
-            name: h.name, code, contracts: h.nominal,
-            notional: h.nominal * h.price * RAND_PER_INDEX_POINT * scale
-          });
-        } else if (code) {
-          futures.push({ name: h.name, code, contracts: null, notional: null });
-        }
+      // value and pct are zero on a futures line; nominal x price is the only record
+      const fut = futuresExposure(h);
+      if (fut) {
+        futures.push({
+          name: h.name, code: fut.code, contracts: fut.contracts,
+          notional: fut.notional == null ? null : fut.notional * scale
+        });
         return;
       }
       if (isNonEquityHolding(h)) return;
@@ -207,11 +225,9 @@ function computeActiveShare(fund, month, { indexCode, includeOffshore = false } 
   const sa = new Map(exp.sa);
   const applied = [];
   exp.futures.forEach(f => {
-    const target = indexInfo(month, f.code);
-    if (!target || !f.notional) { applied.push({ ...f, applied: false }); return; }
-    Object.entries(target.weights).forEach(([share, pct]) => {
-      sa.set(share, (sa.get(share) || 0) + (f.notional * pct) / 100);
-    });
+    const spread = spreadFutureAcrossIndex(f.code, f.notional, month);
+    if (!spread.length) { applied.push({ ...f, applied: false }); return; }
+    spread.forEach(([share, rand]) => sa.set(share, (sa.get(share) || 0) + rand));
     applied.push({ ...f, applied: true });
   });
 

@@ -298,6 +298,8 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
   const positions = new Map();
   const expanded = [];
   const unresolvedFunds = [];
+  const futuresApplied = [];
+  const futuresUnsized = [];
   const fundsWithHoldings = listFundsWithHoldings();
   let equityWeight = 0, mappedWeight = 0;
 
@@ -317,6 +319,38 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
     });
 
     (snap.holdings || []).forEach(h => {
+      // An index future sits in the file at a value of zero, so without this it is simply
+      // absent from the allocation. It is equity exposure bought with cash: the notional
+      // goes into the index's own constituents, and the same amount comes off cash, so the
+      // fund still totals its own NAV. A short future runs the other way and reduces equity.
+      const fut = typeof futuresExposure === "function" ? futuresExposure(h) : null;
+      if (fut) {
+        if (fut.notional == null) {
+          futuresUnsized.push({ name: h.name, code: fut.code });
+          return;
+        }
+        const wFut = scale * (fut.notional / snap.total) * 100;
+        const spread = spreadFutureAcrossIndex(fut.code, fut.notional, month);
+        if (!spread.length) {
+          futuresUnsized.push({ name: h.name, code: fut.code, noWeights: true });
+          return;
+        }
+        spread.forEach(([share, rand]) => {
+          const wi = scale * (rand / snap.total) * 100;
+          const look = lookupSaInc(share);
+          // ALSI and CTOP are JSE indices, so their constituents are SA-listed lines
+          const listing = lookupListing(share, "ZAR");
+          equityWeight += wi;
+          if (look.origin === "source" || look.origin === "manual") mappedWeight += wi;
+          buckets["SA Inc"] += wi * look.pct;
+          buckets[listing.listing === "SA" ? "Quasi-Offshore" : "Offshore Equity"] += wi * (1 - look.pct);
+          listed[listing.listing === "SA" ? "SA Equity" : "Offshore Equity"] += wi;
+        });
+        buckets["SA Cash"] -= wFut;
+        listed["SA Cash"] -= wFut;
+        futuresApplied.push({ name: h.name, code: fut.code, contracts: fut.contracts, weight: wFut });
+        return;
+      }
       if (isNonEquityHolding(h)) return;   // counted via segments above
       const w = scale * (h.pct || 0);
       if (!w) return;
@@ -363,6 +397,8 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
     positions: [...positions.values()].sort((a, b) => b.weight - a.weight),
     expanded,
     unresolvedFunds,
+    futuresApplied,
+    futuresUnsized,
     coverage: equityWeight ? (mappedWeight / equityWeight) * 100 : 0
   };
 }

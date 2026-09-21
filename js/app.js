@@ -834,6 +834,15 @@ function renderLookThroughSection() {
     parts.push("Held as a single line — no saved holdings for " +
       lt.unresolvedFunds.map(e => `${e.name} (${e.weight.toFixed(1)}%)`).join(", ") + ".");
   }
+  (lt.futuresApplied || []).forEach(f => {
+    parts.push(`${f.name} ${f.contracts > 0 ? "+" : ""}${f.contracts} contracts — ` +
+      `${f.weight > 0 ? "+" : ""}${f.weight.toFixed(1)}% equity at index weight, ` +
+      `offset against cash.`);
+  });
+  (lt.futuresUnsized || []).forEach(f => {
+    parts.push(`${f.name} carries no contract count in the saved history, so its index ` +
+      `exposure is missing here. Rebuild the history to pick it up.`);
+  });
   // the listed bar reflects the fund look-through and any listing calls made below, so say
   // where it has moved away from what the custodian statement itself reported
   const custodian = computeCustodianAllocation(fund, month);
