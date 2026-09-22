@@ -999,6 +999,17 @@ function renderActiveShareSection() {
       `${latest.label}. Switch the index if that is the fairer comparison.`);
   }
 
+  // consolidating a dual listing is an assumption about issuer identity, so it is shown
+  if ((latest.consolidated || []).length) {
+    const byIssuer = {};
+    latest.consolidated.forEach(c => {
+      (byIssuer[c.issuer] = byIssuer[c.issuer] || []).push(c.ticker);
+    });
+    notes.push("Counted under one issuer: " +
+      Object.entries(byIssuer).map(([iss, ts]) => `${ts.join(", ")} as ${iss}`).join("; ") +
+      " — the same economic exposure listed on another exchange.");
+  }
+
   const unpriced = latest.futures.filter(f => !f.applied);
   if (unpriced.length) {
     warn.push(`${unpriced.map(f => f.name).join(", ")} carries no contract count in the saved ` +

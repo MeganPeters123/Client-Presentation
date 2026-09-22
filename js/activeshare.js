@@ -33,6 +33,37 @@ const RAND_PER_INDEX_POINT = 10;
  * holds a derivative tracking something else, so they are offered but never the default. */
 const PRIMARY_INDEX = "J200";
 
+/** Dual listings, consolidated under one issuer for active share.
+ *
+ *  A share quoted on two exchanges is one economic exposure, and the index carries it once,
+ *  under its JSE code. Holding the London line instead of — or as well as — the Johannesburg
+ *  one is not an active decision against the benchmark, so both legs are counted as the same
+ *  position here. Without this the fund reads as underweight a company it actually owns, and
+ *  active share is overstated.
+ *
+ *  The test is whether the two lines are the *same* underlying exposure. These are: four
+ *  fungible dual listings, one ADR over the same shares, and one dual-listed company whose
+ *  two entities are economically equalised. A share merely *similar* to another does not
+ *  belong here.
+ *
+ *  This applies to active share only. In the asset allocation those offshore legs really are
+ *  offshore-listed, which is what the SA/offshore split is there to report. */
+const ISSUER_ALIASES = {
+  "AAL LN": "AGL",     // Anglo American plc — LSE and JSE lines of one company
+  "BHP LN": "BHG",     // BHP Group Ltd
+  "MNDI LN": "MNP",    // Mondi plc
+  "BATS LN": "BTI",    // British American Tobacco plc
+  "BUD UN": "ANH",     // AB InBev — the NYSE ADR over the same shares as the JSE listing
+  "N91 LN": "NY1"      // Ninety One plc / Ninety One Ltd, an equalised dual-listed company
+};
+
+/** The code a position should be compared under: its issuer's JSE code where the line is one
+ *  leg of a dual listing, otherwise the ticker as given. */
+function resolveIssuer(ticker) {
+  const raw = rawTicker(ticker);
+  return ISSUER_ALIASES[raw] || ISSUER_ALIASES[normTicker(raw)] || null;
+}
+
 /* Which index each contract tracks. DCAP is the capped-SWIX top 40, which is the index the
  * J430 block carries — and is what the older Balanced positions were written against before
  * they rolled into CTOP. DTOP is deliberately absent: no index code in the weights export
@@ -63,8 +94,6 @@ function persistIndexWeights() {
   }
 }
 
-/** Reads the month-end index weights export: Month End, Source Date, Index Code,
- *  Portfolio, Index, Source Sheet, Share, Name, Weight. */
 /** YYYY-MM-DD from whatever a date arrives as: a Date, an ISO string, or an Excel serial
  *  (which is what a CSV date column becomes once the sheet reader has had it). */
 function isoDate(v) {
@@ -82,6 +111,8 @@ function isoDate(v) {
   return isNaN(d) ? null : isoDate(d);
 }
 
+/** Reads the month-end index weights export: Month End, Source Date, Index Code,
+ *  Portfolio, Index, Source Sheet, Share, Name, Weight. */
 async function importIndexWeightsFromFile(file) {
   const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
   const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: null });
@@ -189,6 +220,7 @@ function fundEquityExposure(fund, month) {
   const sa = new Map();
   let offshore = 0;
   const futures = [];
+  const consolidated = [];
   const total = snap.total;
 
   function walk(holdings, scale) {
@@ -210,7 +242,14 @@ function fundEquityExposure(fund, month) {
         const sub = target && getFundSnapshotAtOrBefore(target, month, null);
         if (sub && sub.holdings) { walk(sub.holdings, scale * (h.pct || 0) / 100); return; }
       }
-      if (String(h.ccy || "").trim().toUpperCase() === "ZAR") {
+      // one leg of a dual listing counts under its issuer, wherever it happens to trade
+      const issuer = resolveIssuer(h.ticker);
+      if (issuer) {
+        sa.set(issuer, (sa.get(issuer) || 0) + rand);
+        const seen = consolidated.find(c => c.ticker === rawTicker(h.ticker));
+        if (seen) seen.rand += rand;
+        else consolidated.push({ name: h.name, ticker: rawTicker(h.ticker), issuer, rand });
+      } else if (String(h.ccy || "").trim().toUpperCase() === "ZAR") {
         const k = rawTicker(h.ticker) || (h.name || "").toUpperCase();
         sa.set(k, (sa.get(k) || 0) + rand);
       } else {
@@ -219,7 +258,7 @@ function fundEquityExposure(fund, month) {
     });
   }
   walk(snap.holdings || [], 1);
-  return { sa, offshore, futures, total, asOf: isoDate(snap.asOf) };
+  return { sa, offshore, futures, consolidated, total, asOf: isoDate(snap.asOf) };
 }
 
 /** Active share for one fund, month and index.
@@ -264,6 +303,7 @@ function computeActiveShare(fund, month, { indexCode, includeOffshore = false } 
     offshoreWeight,
     // both sides are that month's cut by construction — the lookup is keyed on the month
     fundAsOf: exp.asOf, indexMonthEnd: mrec.monthEnd || null, indexSourceDate: mrec.sourceDate || null,
+    consolidated: exp.consolidated,
     sourceSheet: info.sourceSheet, label: info.label
   };
 }
