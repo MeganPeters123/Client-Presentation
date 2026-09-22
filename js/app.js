@@ -10,6 +10,53 @@ let selectedFund = "all"; // "all" (consolidated) or a fund name (live or saved-
 let selectedPeriod = "current"; // "current" (live upload) or a "YYYY-MM" saved history month
 let hasAutoSelectedPeriod = false; // so a fresh page load with saved history (but no live upload yet) opens on the latest saved month instead of an empty "Current"
 
+/* The position-level cards — look-through, active share, exposure breakdown, top 10 — are
+ * four views of one fund, so they follow one choice instead of each keeping its own. They
+ * used to default independently to whatever sorted first, which meant reviewing a fund took
+ * four identical selections and any two cards could quietly be showing different funds. */
+let positionFund = null;
+let positionMonth = null;
+
+/** Fund to show in the position-level cards: the last one chosen, else the largest by AUM,
+ *  which is a better opening view than whatever happens to be first alphabetically. */
+function defaultPositionFund(funds) {
+  if (positionFund && funds.includes(positionFund)) return positionFund;
+  const months = listAllPeriodMonths();
+  if (months.length) {
+    const sized = funds
+      .map(f => ({ f, snap: getFundSnapshotAtOrBefore(f, months[0]) }))
+      .filter(x => x.snap)
+      .sort((a, b) => b.snap.total - a.snap.total);
+    if (sized.length) return sized[0].f;
+  }
+  return funds[0];
+}
+
+/** Wires a card's fund/period selectors to the shared choice. */
+function syncPositionSelectors(fundSel, periodSel) {
+  const funds = listFundsWithHoldings();
+  fundSel.innerHTML = funds.map(f => `<option value="${escAttr(f)}">${f}</option>`).join("");
+  fundSel.value = defaultPositionFund(funds);
+  positionFund = fundSel.value;
+
+  if (!periodSel) return { fund: positionFund, month: null };
+  const months = listHoldingMonthsForFund(positionFund);   // newest first
+  periodSel.innerHTML = months.map(m => `<option value="${m}">${monthLabelFromKey(m)}</option>`).join("");
+  periodSel.value = months.includes(positionMonth) ? positionMonth : months[0];
+  positionMonth = periodSel.value;
+  return { fund: positionFund, month: positionMonth };
+}
+
+/** Any card's selector changing moves them all, so the page always shows one fund. */
+function onPositionSelectionChange(fundSel, periodSel) {
+  positionFund = fundSel.value;
+  if (periodSel) positionMonth = periodSel.value;
+  renderLookThroughSection();
+  renderActiveShareSection();
+  renderBreakdownSection();
+  renderHoldingsSections();
+}
+
 /* ---------- theme ---------- */
 (function initTheme() {
   let saved = null;
@@ -475,6 +522,42 @@ function computeFundTrendPoints() {
 }
 
 /* ---------- KPI row ---------- */
+/** The headline AUM figure, from a live upload if there is one, otherwise from the saved
+ *  month being viewed — with the month-on-month move, which is the first thing anyone asks
+ *  of a total. Returns null when there is nothing to total. */
+function totalAumTile() {
+  if (state.holdingsSnapshots.length && selectedPeriod === "current") {
+    const total = state.holdingsSnapshots.reduce((s, snap) => s + snap.total, 0);
+    const n = state.holdingsSnapshots.length;
+    return { label: "Total AUM", value: "R " + fmtCurrency(total),
+             delta: `across ${n} fund${n > 1 ? "s" : ""}`, deltaClass: "" };
+  }
+  const months = listAllPeriodMonths();          // newest first
+  if (!months.length) return null;
+  const month = selectedPeriod !== "current" && months.includes(selectedPeriod)
+    ? selectedPeriod : months[0];
+
+  if (selectedFund !== "all") {
+    const snap = getFundSnapshotAtOrBefore(selectedFund, month);
+    if (!snap) return null;
+    return { label: "Fund AUM", value: "R " + fmtCurrency(snap.total),
+             delta: `${snap.fund} — ${monthLabelFromKey(snap.period)}`, deltaClass: "" };
+  }
+
+  const cons = getConsolidatedAtPeriod(month);
+  if (!cons.total) return null;
+  const prevMonth = months[months.indexOf(month) + 1];
+  const prev = prevMonth ? getConsolidatedAtPeriod(prevMonth) : null;
+  const pct = prev && prev.total ? ((cons.total - prev.total) / prev.total) * 100 : null;
+  return {
+    label: "Total AUM", value: "R " + fmtCurrency(cons.total),
+    delta: pct != null
+      ? `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% on ${monthLabelFromKey(prevMonth)} · ${cons.funds.length} funds`
+      : `${cons.funds.length} funds · ${monthLabelFromKey(month)}`,
+    deltaClass: pct != null ? (pct >= 0 ? "up" : "down") : ""
+  };
+}
+
 function renderKpis() {
   const row = document.getElementById("kpiRow");
   const tiles = [];
@@ -497,13 +580,11 @@ function renderKpis() {
     });
   }
 
-  if (state.holdingsSnapshots.length) {
-    const total = state.holdingsSnapshots.reduce((s, snap) => s + snap.total, 0);
-    tiles.push({
-      label: "Total AUM (Funds)", value: "R " + fmtCurrency(total),
-      delta: `across ${state.holdingsSnapshots.length} fund${state.holdingsSnapshots.length > 1 ? "s" : ""}`, deltaClass: ""
-    });
-  }
+  // Total AUM used to appear only for a live upload, so the headline number vanished the
+  // moment you browsed a saved month — which is the normal way this is used. Saved history
+  // answers the same question, so fall back to it rather than showing nothing.
+  const aumTile = totalAumTile();
+  if (aumTile) tiles.push(aumTile);
 
   const { segments: activeSegments, label: activeLabel } = getActiveAllocationSegments();
   if (activeSegments.length) {
@@ -756,9 +837,11 @@ function renderAllocationSection() {
 }
 
 /* ---------- Asset Allocation look-through ---------- */
-["lookThroughFund", "lookThroughPeriod", "lookThroughExpand"].forEach(id => {
-  document.getElementById(id).addEventListener("change", renderLookThroughSection);
+["lookThroughFund", "lookThroughPeriod"].forEach(id => {
+  document.getElementById(id).addEventListener("change", () => onPositionSelectionChange(
+    document.getElementById("lookThroughFund"), document.getElementById("lookThroughPeriod")));
 });
+document.getElementById("lookThroughExpand").addEventListener("change", renderLookThroughSection);
 // the breakdown card reads the same in-house fund setting, so it has to follow it
 document.getElementById("lookThroughExpand").addEventListener("change", renderBreakdownSection);
 
@@ -771,17 +854,8 @@ function renderLookThroughSection() {
   card.style.display = "block";
 
   const fundSel = document.getElementById("lookThroughFund");
-  const prevFund = fundSel.value;
-  fundSel.innerHTML = funds.map(f => `<option value="${escAttr(f)}">${f}</option>`).join("");
-  fundSel.value = funds.includes(prevFund) ? prevFund : funds[0];
-  const fund = fundSel.value;
-
-  const months = listHoldingMonthsForFund(fund);      // newest first
   const perSel = document.getElementById("lookThroughPeriod");
-  const prevPeriod = perSel.value;
-  perSel.innerHTML = months.map(m => `<option value="${m}">${monthLabelFromKey(m)}</option>`).join("");
-  perSel.value = months.includes(prevPeriod) ? prevPeriod : months[0];
-  const month = perSel.value;
+  const { fund, month } = syncPositionSelectors(fundSel, perSel);
 
   if (!saIncCounts().tickers && !saIncCounts().manual) {
     empty.textContent = "Load the SA Revenue Split workbook above to build the look-through.";
@@ -918,7 +992,9 @@ function renderLookThroughPositions(positions) {
 }
 
 /* ---------- Active Share ---------- */
-["activeShareFund", "activeShareIndex", "activeShareOffshore"].forEach(id => {
+document.getElementById("activeShareFund").addEventListener("change", () =>
+  onPositionSelectionChange(document.getElementById("activeShareFund"), null));
+["activeShareIndex", "activeShareOffshore"].forEach(id => {
   document.getElementById(id).addEventListener("change", renderActiveShareSection);
 });
 
@@ -931,10 +1007,7 @@ function renderActiveShareSection() {
   card.style.display = "block";
 
   const fundSel = document.getElementById("activeShareFund");
-  const prevFund = fundSel.value;
-  fundSel.innerHTML = funds.map(f => `<option value="${escAttr(f)}">${f}</option>`).join("");
-  fundSel.value = funds.includes(prevFund) ? prevFund : funds[0];
-  const fund = fundSel.value;
+  const { fund } = syncPositionSelectors(fundSel, null);
 
   const months = listIndexMonths();
   if (!months.length) {
@@ -1057,7 +1130,8 @@ document.querySelectorAll("#breakdownBySeg button").forEach(btn => {
   });
 });
 ["breakdownFund", "breakdownPeriod"].forEach(id => {
-  document.getElementById(id).addEventListener("change", renderBreakdownSection);
+  document.getElementById(id).addEventListener("change", () => onPositionSelectionChange(
+    document.getElementById("breakdownFund"), document.getElementById("breakdownPeriod")));
 });
 
 function renderBreakdownSection() {
@@ -1067,17 +1141,8 @@ function renderBreakdownSection() {
   card.style.display = "block";
 
   const fundSel = document.getElementById("breakdownFund");
-  const prevFund = fundSel.value;
-  fundSel.innerHTML = funds.map(f => `<option value="${escAttr(f)}">${f}</option>`).join("");
-  fundSel.value = funds.includes(prevFund) ? prevFund : funds[0];
-  const fund = fundSel.value;
-
-  const months = listHoldingMonthsForFund(fund);
   const perSel = document.getElementById("breakdownPeriod");
-  const prevPeriod = perSel.value;
-  perSel.innerHTML = months.map(m => `<option value="${m}">${monthLabelFromKey(m)}</option>`).join("");
-  perSel.value = months.includes(prevPeriod) ? prevPeriod : months[0];
-  const month = perSel.value;
+  const { fund, month } = syncPositionSelectors(fundSel, perSel);
   if (!month) { card.style.display = "none"; return; }
 
   // Sector is parked until there is a mapping to drive it — no file we receive carries GICS,
@@ -1159,7 +1224,9 @@ function renderSectorAssignment(unclassified) {
 }
 
 /* ---------- Top 10 Holdings + Portfolio Changes ---------- */
-["holdingsFundSelector", "holdingsPeriodA", "holdingsPeriodB"].forEach(id => {
+document.getElementById("holdingsFundSelector").addEventListener("change", () =>
+  onPositionSelectionChange(document.getElementById("holdingsFundSelector"), null));
+["holdingsPeriodA", "holdingsPeriodB"].forEach(id => {
   document.getElementById(id).addEventListener("change", renderHoldingsSections);
 });
 
@@ -1181,10 +1248,7 @@ function renderHoldingsSections() {
   card.style.display = "block";
 
   const fundSel = document.getElementById("holdingsFundSelector");
-  const prevFund = fundSel.value;
-  fundSel.innerHTML = funds.map(f => `<option value="${f.replace(/"/g, "&quot;")}">${f}</option>`).join("");
-  fundSel.value = funds.includes(prevFund) ? prevFund : funds[0];
-  const fund = fundSel.value;
+  const { fund } = syncPositionSelectors(fundSel, null);
 
   const months = listHoldingMonthsForFund(fund).slice().sort();   // oldest first
   const selA = document.getElementById("holdingsPeriodA");

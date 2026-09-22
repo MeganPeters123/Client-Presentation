@@ -1,11 +1,15 @@
 /* Chart.js rendering for the AUM trend and asset allocation cards. */
 "use strict";
 
+/* One colour language across every card: SA-linked exposure in greens, offshore in blues,
+ * cash in amber, fixed income in orange, property in purple. The allocation donut used to
+ * run on a separate navy/grey palette, so "JSE-listed Equity" there and "SA Equity" on the
+ * look-through bar — the same money — came out two unrelated colours on the same page. */
 const ASSET_SEGMENT_COLORS = {
-  "jselistedequity": "#14315C", "globallistedequity": "#A9A9A9",
-  "sacash": "#8FAADC", "globalcash": "#F2B84B",
-  "safixedincome": "#1C8299", "globalfixedincome": "#6FC2D6",
-  "saproperty": "#C6AEEA", "globalproperty": "#E7B8E0"
+  "jselistedequity": "#00560a", "globallistedequity": "#2a78d6",
+  "sacash": "#eda100", "globalcash": "#8FAADC",
+  "safixedincome": "#eb6834", "globalfixedincome": "#4a3aa7",
+  "saproperty": "#7cc351", "globalproperty": "#9085e9"
 };
 const PALETTE = ["#2a78d6", "#008300", "#e87ba4", "#eda100", "#1baf7a", "#eb6834", "#4a3aa7", "#e34948"];
 
