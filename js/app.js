@@ -949,7 +949,8 @@ function renderActiveShareSection() {
     const info = months.map(m => indexInfo(m, c)).find(Boolean);
     return `<option value="${c}">${escAttr(info ? info.label : c)}</option>`;
   }).join("");
-  idxSel.value = codes.includes(prevIdx) ? prevIdx : codes[0];
+  idxSel.value = codes.includes(prevIdx) ? prevIdx
+    : (codes.includes(PRIMARY_INDEX) ? PRIMARY_INDEX : codes[0]);
 
   const includeOffshore = document.getElementById("activeShareOffshore").checked;
   const series = activeShareSeries(fund, idxSel.value, { includeOffshore });
@@ -979,6 +980,25 @@ function renderActiveShareSection() {
 
   // anything that makes the number mean less than it appears to gets said, not hidden
   const warn = [];
+
+  // J200 is the house benchmark, so it stays the default. But a fund whose derivative
+  // tracks something else is the one case where another index is the fitting comparison,
+  // and that is knowable from the position rather than something to remember.
+  const offIndex = latest.futures
+    .filter(f => f.applied && f.code !== idxSel.value)
+    .map(f => f.code);
+  const notes = [];
+  if (offIndex.length) {
+    const names = [...new Set(offIndex)].map(c => {
+      const info = months.map(m => indexInfo(m, c)).find(Boolean);
+      return info ? info.label : c;
+    });
+    const held = latest.futures.filter(f => f.applied && f.code !== idxSel.value)
+      .map(f => f.name).join(", ");
+    notes.push(`Holds ${held}, which tracks ${names.join(" / ")}, but is measured against ` +
+      `${latest.label}. Switch the index if that is the fairer comparison.`);
+  }
+
   const unpriced = latest.futures.filter(f => !f.applied);
   if (unpriced.length) {
     warn.push(`${unpriced.map(f => f.name).join(", ")} carries no contract count in the saved ` +
@@ -988,9 +1008,10 @@ function renderActiveShareSection() {
     warn.push(`These ${latest.label} weights were sourced from the ${latest.sourceSheet} sheet, ` +
       `so they are not SWIX weights.`);
   }
-  document.getElementById("activeShareWarnings").innerHTML = warn.length
-    ? warn.map(w => `<div class="card-subtitle" style="color:var(--bad);margin-bottom:8px;">${w}</div>`).join("")
-    : "";
+  // red is for something being wrong; a benchmark suggestion is not, so it reads as a note
+  document.getElementById("activeShareWarnings").innerHTML =
+    warn.map(w => `<div class="card-subtitle" style="color:var(--bad);margin-bottom:8px;">${w}</div>`).join("") +
+    notes.map(n => `<div class="card-subtitle" style="margin-bottom:8px;">${n}</div>`).join("");
 
   renderActiveShareChart(series.map(s => ({ month: s.month, value: s.value })));
 

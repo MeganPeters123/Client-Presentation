@@ -29,6 +29,10 @@ const INDEX_WEIGHTS_KEY = "aum-dashboard-index-weights-v1";
  * notional at this multiplier. */
 const RAND_PER_INDEX_POINT = 10;
 
+/* J200 is the house benchmark. The others are reached for only in the odd case where a fund
+ * holds a derivative tracking something else, so they are offered but never the default. */
+const PRIMARY_INDEX = "J200";
+
 /* Which index each contract tracks. DCAP is the capped-SWIX top 40, which is the index the
  * J430 block carries — and is what the older Balanced positions were written against before
  * they rolled into CTOP. DTOP is deliberately absent: no index code in the weights export
