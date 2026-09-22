@@ -150,7 +150,15 @@ def build(config, months, lookback_days, lookahead_days, verbose):
     wanted = set(months)
     best = {}      # (fund, month) -> snapshot
     problems = []
+    below_floor = []
     parsed_count = 0
+
+    # A wound-up mandate keeps producing valuation files for months afterwards, holding the
+    # rump of a closing account — a few hundred rand, then a few thousand cents. Those are
+    # arithmetically fine but useless: percentages computed on a base that small are
+    # meaningless, and the fund still appears in every selector as though it were live.
+    # Below this, a snapshot is dropped and said out loud rather than kept and believed.
+    min_total = float(config.get("min_snapshot_total", 1_000_000))
 
     overrides = config.get("fund_name_overrides", {})
     skip_funds = {f.lower() for f in config.get("exclude_funds", [])}
@@ -186,6 +194,10 @@ def build(config, months, lookback_days, lookahead_days, verbose):
         key = month_key(snap["asOf"])
         if key not in wanted or (restrict_to and key != restrict_to):
             return False
+        if (snap.get("total") or 0) < min_total:
+            # a real match, so stop looking for this fund-month — just don't keep it
+            below_floor.append((snap["fund"], key, snap["asOf"], snap.get("total") or 0.0))
+            return True
         snap["path"] = str(path)
         slot = (snap["fund"], key)
         if slot not in best or snap["asOf"] > best[slot]["asOf"]:
@@ -225,7 +237,7 @@ def build(config, months, lookback_days, lookahead_days, verbose):
 
     print(f"\nOpened {parsed_count} file(s).")
     unmapped = sorted(c for c in seen_categories if c.lower() not in cat_map)
-    return best, problems, unmapped
+    return best, problems, unmapped, below_floor
 
 
 def report(best, months):
@@ -260,6 +272,20 @@ def report(best, months):
         print("Either the month-end file is missing from the archive, or it was a public holiday.")
         for fund, key, got, expected in flagged:
             print(f"   {fund:38} {key}  used {got}, expected {expected}")
+
+
+def report_below_floor(below_floor, config):
+    """Name every snapshot dropped for being too small. A silent floor is a floor nobody
+    remembers is there, and the difference between 'this fund closed' and 'this fund is
+    missing' matters."""
+    if not below_floor:
+        return
+    floor = float(config.get("min_snapshot_total", 1_000_000))
+    print("\n" + "-" * 78)
+    print(f"DROPPED — below the R{floor:,.0f} floor (a closing account's rump, not a position):")
+    for fund, key, as_of, total in sorted(below_floor):
+        print(f"   {fund:38} {key}  {as_of}  R {total:>14,.2f}")
+    print("Set min_snapshot_total in config.json to change the floor.")
 
 
 def report_categories(best, unmapped):
@@ -364,9 +390,10 @@ def main():
     months = month_range(args.from_month, args.to_month)
     print(f"Building history for {len(months)} month(s): {months[0]} .. {months[-1]}\n")
 
-    best, problems, unmapped = build(config, months, args.lookback_days, args.lookahead_days, verbose=not args.quiet)
+    best, problems, unmapped, below_floor = build(config, months, args.lookback_days, args.lookahead_days, verbose=not args.quiet)
     report(best, months)
     report_categories(best, unmapped)
+    report_below_floor(below_floor, config)
 
     if problems:
         print("\n" + "-" * 78)
