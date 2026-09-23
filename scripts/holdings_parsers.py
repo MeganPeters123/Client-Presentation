@@ -378,6 +378,94 @@ def parse_holdings_file(path):
             return parse_ipd_xls(path)
         if kind == "text":
             return parse_flat_csv(path)
+        if kind == "xlsx":
+            return parse_pres_xlsx(path)
     except Exception as exc:  # a malformed file shouldn't abort a 15-month run
         return [{"error": f"{type(exc).__name__}: {exc}", "source": path.name}]
     return []
+
+
+# ------------------------------------------- format D: Pres valuation as a flat .xlsx
+
+# The same Pres portfolio valuation as the custodian HTML export, saved as a workbook
+# instead. The hedge fund's monthly NAV arrives this way. Nothing is nested: the hierarchy
+# the HTML version carries in indentation is spelled out in two columns here, which makes
+# this the easier of the two to read.
+PRES_XLSX_REQUIRED = ["Valuation First Level", "% of Total Market Value", "CCY"]
+
+
+def parse_pres_xlsx(path):
+    import openpyxl
+
+    ws = openpyxl.load_workbook(path, data_only=True, read_only=True).active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return []
+    header = [str(h).strip() if h is not None else "" for h in rows[0]]
+    if any(name not in header for name in PRES_XLSX_REQUIRED):
+        return []
+    col = {name: i for i, name in enumerate(header) if name}
+
+    def cell(row, name):
+        i = col.get(name)
+        return row[i] if i is not None and i < len(row) else None
+
+    fund_name = None
+    as_of = None
+    fund_total = 0.0
+    positions = []
+    split_by_class = {}
+
+    for row in rows[1:]:
+        label = cell(row, "i Issue Name")
+        category = cell(row, "Valuation First Level")
+        if not label or not category:
+            continue
+        fund_name = fund_name or (cell(row, "Entity Name") or "").strip() or None
+        if as_of is None:
+            raw = cell(row, "i Report Effective Date")
+            if isinstance(raw, datetime):
+                as_of = raw.date()
+            elif isinstance(raw, date):
+                as_of = raw
+
+        value = to_number(cell(row, "Sum of Market Value Income")) or 0.0
+        pct = to_number(cell(row, "% of Total Market Value")) or 0.0
+        ccy = (cell(row, "CCY") or "").strip()
+        fund_total += value
+
+        cat = title_case(str(category).strip())
+        bucket = split_by_class.setdefault(cat, {"local": 0.0, "foreign": 0.0})
+        bucket["local" if is_local_ccy(ccy) else "foreign"] += pct
+
+        positions.append({
+            "name": str(label).strip(),
+            "ticker": (cell(row, "Ticker") or cell(row, "PrimaryAssetID") or "").strip(),
+            "ccy": ccy,
+            "category": cat,
+            "pct": pct,
+            "value": value,
+            # zero-market-value lines (an index future) are described only by these
+            "nominal": to_number(cell(row, "Original Nominal")),
+            "price": to_number(cell(row, "Market Price /Yield")),
+        })
+
+    if not positions or not fund_total or as_of is None:
+        return []
+
+    segments = []
+    for cat, split in split_by_class.items():
+        for side in ("local", "foreign"):
+            if split[side] > 0.005:
+                segments.append({
+                    "category": local_foreign_label(cat, side),
+                    "value": (split[side] / 100.0) * fund_total,
+                })
+    if not segments:
+        return []
+
+    return [{
+        "fund": fund_name or path.stem, "fundCode": None, "asOf": as_of, "total": fund_total,
+        "segments": segments, "holdings": positions,
+        "source": path.name, "format": "Pres Valuation (.xlsx)",
+    }]
