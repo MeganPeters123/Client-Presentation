@@ -558,6 +558,21 @@ function totalAumTile() {
   };
 }
 
+/** Opens on the newest saved month when there is no live upload.
+ *
+ *  This has to happen before anything reads the selected period, not as a side effect of
+ *  the funds table rendering — that ran after the KPI row, so a fresh import drew its
+ *  headline tiles against a period that had not been chosen yet and the allocation tile
+ *  came out empty until something else triggered a redraw. */
+function autoSelectPeriod(months) {
+  // and only once there is something to choose from: the page renders once on load, before
+  // any file is imported, and latching the flag there spent the one shot on an empty
+  // history — so the month was never selected and the allocation tile stayed blank
+  if (hasAutoSelectedPeriod || !months.length) return;
+  hasAutoSelectedPeriod = true;
+  if (!state.holdingsSnapshots.length) selectedPeriod = months[0];
+}
+
 function renderKpis() {
   const row = document.getElementById("kpiRow");
   const tiles = [];
@@ -664,10 +679,7 @@ function renderFundsSection() {
 
   const periodSel = document.getElementById("periodSelector");
   const months = selectedFund === "all" ? listAllPeriodMonths() : listPeriodsForFund(selectedFund).map(s => s.period);
-  if (!hasAutoSelectedPeriod) {
-    hasAutoSelectedPeriod = true;
-    if (!state.holdingsSnapshots.length && months.length) selectedPeriod = months[0];
-  }
+  autoSelectPeriod(months);
   periodSel.innerHTML = `<option value="current">Current Upload</option>` +
     months.map(m => `<option value="${m}">${monthLabelFromKey(m)}</option>`).join("");
   periodSel.value = months.includes(selectedPeriod) ? selectedPeriod : "current";
@@ -1495,6 +1507,8 @@ function thead_sync_indicators() {
 
 /* ---------- overall render ---------- */
 function renderAll() {
+  autoSelectPeriod(selectedFund === "all" ? listAllPeriodMonths()
+                                          : listPeriodsForFund(selectedFund).map(s => s.period));
   renderHistorySummary();
   renderKpis();
   renderAumSection();
