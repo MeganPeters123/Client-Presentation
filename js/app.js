@@ -837,15 +837,57 @@ function renderAllocationSection() {
   const { segments, label } = getActiveAllocationSegments();
   if (!segments.length) { card.style.display = "none"; return; }
   card.style.display = "block";
-  document.getElementById("allocationSubtitle").textContent = `% of total fund value by asset class — ${label}`;
-  const tbody = document.querySelector("#allocationTable tbody");
-  tbody.innerHTML = segments.map((s, i) => `
+  document.getElementById("allocationSubtitle").textContent = label;
+
+  const colorFor = (k, i) => LOOKTHROUGH_COLORS[k] || CURRENCY_COLORS[k] || colorForCategory(k, i);
+
+  // 1. asset class as the custodian reports it — local against offshore
+  const total = segments.reduce((s, x) => s + x.value, 0);
+  renderPie("allocationChart", "allocationLegend",
+    segments.map(x => ({ key: x.category, weight: total ? (x.value / total) * 100 : 0 })), colorFor);
+
+  document.querySelector("#allocationTable tbody").innerHTML = segments.map((x, i) => `
     <tr>
-      <td><span class="legend-swatch" style="display:inline-block;background:${colorForCategory(s.category, i)};margin-right:7px;"></span>${s.category}</td>
-      <td class="num">${fmtCurrency(s.value)}</td>
-      <td class="num">${s.pct.toFixed(1)}%</td>
+      <td><span class="legend-swatch" style="display:inline-block;background:${colorFor(x.category, i)};margin-right:7px;"></span>${x.category}</td>
+      <td class="num">${fmtCurrency(x.value)}</td>
+      <td class="num">${x.pct.toFixed(1)}%</td>
     </tr>`).join("");
-  renderAllocationChart(segments);
+
+  // The other two read position-level data, which only saved months carry, so they follow
+  // the same fund but fall back to the newest saved month on "Current Upload".
+  const months = listAllPeriodMonths();
+  const month = selectedPeriod !== "current" && months.includes(selectedPeriod) ? selectedPeriod : months[0];
+  const expandFunds = document.getElementById("lookThroughExpand").value === "expand";
+  const oneFund = selectedFund !== "all";
+  const counts = saIncCounts();
+
+  // 2. the same buckets the look-through card uses
+  const ltEmpty = document.getElementById("lookThroughPieEmpty");
+  const ltWrap = document.getElementById("lookThroughPie").parentElement;
+  const lt = month && (counts.tickers || counts.manual)
+    ? (oneFund ? computeLookThrough(selectedFund, month, { expandFunds })
+               : computeLookThroughConsolidated(month, { expandFunds }))
+    : null;
+  if (lt) {
+    ltEmpty.style.display = "none";
+    ltWrap.style.display = "";
+    renderPie("lookThroughPie", "lookThroughPieLegend",
+      ALLOCATION_ORDER.filter(k => (lt.buckets[k] || 0) > 0.005)
+        .map(k => ({ key: k, weight: lt.buckets[k] })), colorFor);
+    document.getElementById("lookThroughPieSub").textContent =
+      `Split by where the revenue is earned · ${lt.coverage.toFixed(0)}% of equity researched`;
+  } else {
+    ltEmpty.style.display = "";
+    ltWrap.style.display = "none";
+    document.getElementById("lookThroughPieLegend").innerHTML = "";
+  }
+
+  // 3. currency
+  const bd = month
+    ? (oneFund ? computeBreakdown(selectedFund, month, { by: "ccy", expandFunds })
+               : computeBreakdownConsolidated(month, { by: "ccy", expandFunds }))
+    : null;
+  renderPie("currencyPie", "currencyPieLegend", bd ? bd.rows : [], colorFor);
 }
 
 /* ---------- Asset Allocation look-through ---------- */

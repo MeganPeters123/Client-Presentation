@@ -38,6 +38,22 @@ function isNonEquityHolding(h) {
   return NON_EQUITY_CATEGORY.test(c) || Object.prototype.hasOwnProperty.call(SEGMENT_TO_BUCKET, c);
 }
 
+/** A holding's trading currency, falling back to what its category already implies.
+ *
+ *  The IPD extracts carry no currency column at all, and SA/offshore is decided on currency,
+ *  so every position in them defaulted to offshore — a fund of JSE blue chips reported as
+ *  91% offshore equity while its own custodian called it 91% JSE-listed. The category is the
+ *  custodian's own local/foreign call, so it answers the question when the currency cannot.
+ *  A foreign category still yields nothing, which is honest: it says offshore, not which
+ *  currency, and that is all the file knows. */
+const SA_CATEGORY = /^(jse|sa\b|domestic|local)/i;
+
+function holdingCcy(h) {
+  const ccy = String(h.ccy || "").trim().toUpperCase();
+  if (ccy) return ccy;
+  return SA_CATEGORY.test(h.category || "") ? "ZAR" : "";
+}
+
 const LOOKTHROUGH_BUCKETS = [
   "SA Inc", "Quasi-Offshore", "Offshore Equity",
   "SA Cash", "Offshore Cash", "SA Fixed Income", "Offshore Fixed Income"
@@ -368,7 +384,7 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
       // choice or because we have no saved holdings for it
       const heldAsLine = isFundHolding(h);
       const look = lookupSaInc(h.ticker);
-      const listing = lookupListing(h.ticker, h.ccy);
+      const listing = lookupListing(h.ticker, holdingCcy(h));
       equityWeight += w;
       if (look.origin === "source" || look.origin === "manual") mappedWeight += w;
 
@@ -376,7 +392,7 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
       const prev = positions.get(key);
       if (prev) prev.weight += w;
       else positions.set(key, {
-        name: h.name, ticker: h.ticker, ccy: h.ccy, weight: w, isFund: heldAsLine,
+        name: h.name, ticker: h.ticker, ccy: holdingCcy(h), weight: w, isFund: heldAsLine,
         saInc: look.pct, origin: look.origin,
         listing: listing.listing, listingOverridden: listing.overridden
       });
@@ -446,7 +462,7 @@ function computeBreakdown(fund, monthKey, { by = "ccy", expandFunds = true } = {
           }
         }
       } else {
-        key = String(h.ccy || "").trim().toUpperCase() || "Unknown";
+        key = holdingCcy(h) || "Unknown";
       }
       groups.set(key, (groups.get(key) || 0) + w);
     });
@@ -461,5 +477,64 @@ function computeBreakdown(fund, monthKey, { by = "ccy", expandFunds = true } = {
     rows,
     unclassified: [...unclassified.values()].sort((a, b) => b.weight - a.weight),
     total: rows.reduce((s, r) => s + r.weight, 0)
+  };
+}
+
+
+/* ---------- consolidated across funds ---------- */
+
+/** The look-through buckets for every fund at a month, weighted by each fund's own AUM.
+ *
+ *  computeLookThrough works in percentages of one fund, so summing those directly would
+ *  give every fund an equal vote regardless of size. Each fund's buckets are re-weighted by
+ *  its share of total AUM before being added. Funds with no saved snapshot at that month are
+ *  simply absent, exactly as they are from the consolidated total itself. */
+function computeLookThroughConsolidated(monthKey, opts = {}) {
+  const buckets = emptyBuckets(LOOKTHROUGH_BUCKETS);
+  const listed = emptyBuckets(LISTED_BUCKETS);
+  let total = 0, covered = 0, equityWeight = 0, mappedWeight = 0;
+  const funds = [];
+
+  listFundsWithHoldings().forEach(fund => {
+    const snap = getFundSnapshotAtOrBefore(fund, monthKey);
+    if (!snap) return;
+    const lt = computeLookThrough(fund, snap.period, opts);
+    if (!lt) return;
+    total += snap.total;
+    funds.push(fund);
+    Object.entries(lt.buckets).forEach(([k, v]) => { buckets[k] += v * snap.total / 100; });
+    Object.entries(lt.listed).forEach(([k, v]) => { listed[k] += v * snap.total / 100; });
+    const eq = lt.coverage != null ? snap.total : 0;
+    equityWeight += eq;
+    mappedWeight += (lt.coverage || 0) / 100 * eq;
+    covered += snap.total;
+  });
+
+  if (!total) return null;
+  const pct = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, (v / total) * 100]));
+  return {
+    buckets: pct(buckets), listed: pct(listed), total, funds,
+    coverage: equityWeight ? (mappedWeight / equityWeight) * 100 : 0
+  };
+}
+
+/** The same idea for the currency and sector cuts. */
+function computeBreakdownConsolidated(monthKey, opts = {}) {
+  const groups = new Map();
+  let total = 0;
+  listFundsWithHoldings().forEach(fund => {
+    const snap = getFundSnapshotAtOrBefore(fund, monthKey);
+    if (!snap) return;
+    const bd = computeBreakdown(fund, snap.period, opts);
+    if (!bd || !bd.rows.length) return;
+    total += snap.total;
+    bd.rows.forEach(r => groups.set(r.key, (groups.get(r.key) || 0) + r.weight * snap.total / 100));
+  });
+  if (!total) return null;
+  return {
+    rows: [...groups.entries()]
+      .map(([key, rand]) => ({ key, weight: (rand / total) * 100 }))
+      .sort((a, b) => b.weight - a.weight),
+    total
   };
 }

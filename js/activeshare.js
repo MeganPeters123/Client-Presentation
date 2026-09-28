@@ -249,7 +249,7 @@ function fundEquityExposure(fund, month) {
         const seen = consolidated.find(c => c.ticker === rawTicker(h.ticker));
         if (seen) seen.rand += rand;
         else consolidated.push({ name: h.name, ticker: rawTicker(h.ticker), issuer, rand });
-      } else if (String(h.ccy || "").trim().toUpperCase() === "ZAR") {
+      } else if (holdingCcy(h) === "ZAR") {
         const k = rawTicker(h.ticker) || (h.name || "").toUpperCase();
         sa.set(k, (sa.get(k) || 0) + rand);
       } else {

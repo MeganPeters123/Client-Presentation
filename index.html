@@ -167,16 +167,34 @@
         <div class="card-subtitle" id="allocationSubtitle">% of total fund value by asset class</div>
       </div>
     </div>
-    <div class="grid2">
-      <div>
-        <div class="table-scroll">
-          <table class="data-table" id="allocationTable">
-            <thead><tr><th>Category</th><th style="text-align:right;">Value</th><th style="text-align:right;">% of Total</th></tr></thead>
-            <tbody></tbody>
-          </table>
+    <div class="pie-row">
+      <div class="pie-col">
+        <div class="pie-title">By asset class</div>
+        <div class="pie-sub">As the custodian reports it — local versus offshore</div>
+        <div class="chart-wrap donut"><canvas id="allocationChart"></canvas></div>
+        <div class="legend" id="allocationLegend"></div>
+      </div>
+      <div class="pie-col">
+        <div class="pie-title">Look-through</div>
+        <div class="pie-sub" id="lookThroughPieSub">Split by where the revenue is earned</div>
+        <div class="chart-wrap donut"><canvas id="lookThroughPie"></canvas></div>
+        <div class="legend" id="lookThroughPieLegend"></div>
+        <div class="pie-empty" id="lookThroughPieEmpty" style="display:none;">
+          Load the SA Revenue Split workbook to show this.
         </div>
       </div>
-      <div class="chart-wrap donut"><canvas id="allocationChart"></canvas></div>
+      <div class="pie-col">
+        <div class="pie-title">By currency</div>
+        <div class="pie-sub">Trading currency of each line, cash included</div>
+        <div class="chart-wrap donut"><canvas id="currencyPie"></canvas></div>
+        <div class="legend" id="currencyPieLegend"></div>
+      </div>
+    </div>
+    <div class="table-scroll" style="margin-top:18px;">
+      <table class="data-table" id="allocationTable">
+        <thead><tr><th>Category</th><th style="text-align:right;">Value</th><th style="text-align:right;">% of Total</th></tr></thead>
+        <tbody></tbody>
+      </table>
     </div>
   </div>
 

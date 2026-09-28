@@ -194,3 +194,17 @@ table.data-table tr:hover td{ background:var(--surface-2); }
 .sector-input{ padding:3px 4px; border:1px solid var(--border); border-radius:var(--radius-sm);
   background:var(--surface); color:var(--ink-2); font-size:11.5px; max-width:180px; }
 .sector-input:focus{ outline:none; border-color:var(--accent); }
+
+/* Three donuts reading as one comparison: same size, same colour language, captions that
+   say what each one answers. Collapses to two then one as the page narrows. */
+.pie-row{ display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; }
+@media (max-width: 980px){ .pie-row{ grid-template-columns:repeat(2, 1fr); } }
+@media (max-width: 640px){ .pie-row{ grid-template-columns:1fr; } }
+.pie-col{ min-width:0; }
+.pie-title{ font-size:12.5px; font-weight:650; }
+.pie-sub{ font-size:11.5px; color:var(--ink-muted); margin:2px 0 8px; min-height:30px; line-height:1.4; }
+.pie-col .chart-wrap.donut{ height:190px; }
+.pie-col .legend{ display:block; margin-top:10px; }
+.pie-col .legend-item{ display:flex; align-items:center; gap:6px; font-size:11.5px; padding:1px 0; }
+.pie-col .legend-item .name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pie-empty{ font-size:11.5px; color:var(--ink-muted); text-align:center; padding:60px 8px; }

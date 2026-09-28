@@ -294,6 +294,47 @@ function renderActiveShareChart(points) {
   });
 }
 
+const pieInstances = {};
+
+/** One donut, plus a legend carrying the numbers — a pie without values on a client slide
+ *  makes people guess. rows: [{ key, weight }] as percentages, already ordered.
+ *  Slices under half a percent are grouped, or the legend becomes a wall of slivers. */
+function renderPie(canvasId, legendId, rows, colorFor, { minSlice = 0.5 } = {}) {
+  const canvas = document.getElementById(canvasId);
+  const legend = document.getElementById(legendId);
+  if (!canvas) return;
+  if (pieInstances[canvasId]) pieInstances[canvasId].destroy();
+
+  const big = rows.filter(r => r.weight >= minSlice);
+  const small = rows.filter(r => r.weight < minSlice && r.weight > 0);
+  const shown = small.length > 1
+    ? [...big, { key: `Other (${small.length})`, weight: small.reduce((s, r) => s + r.weight, 0) }]
+    : rows.filter(r => r.weight > 0);
+  const colors = shown.map((r, i) => (r.key.startsWith("Other (") ? cssVar("--ink-muted") : colorFor(r.key, i)));
+
+  pieInstances[canvasId] = new Chart(canvas.getContext("2d"), {
+    type: "doughnut",
+    data: { labels: shown.map(r => r.key),
+            datasets: [{ data: shown.map(r => r.weight), backgroundColor: colors, borderWidth: 0 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: "56%",
+      plugins: {
+        legend: { display: false },          // the list below carries the values instead
+        tooltip: { callbacks: { label: c => `${c.label}: ${c.parsed.toFixed(1)}%` } }
+      }
+    }
+  });
+
+  if (legend) {
+    legend.innerHTML = shown.map((r, i) => `
+      <div class="legend-item">
+        <span class="legend-swatch" style="background:${colors[i]}"></span>
+        <span class="name">${r.key}</span>
+        <span class="legend-val">${r.weight.toFixed(1)}%</span>
+      </div>`).join("");
+  }
+}
+
 function destroyCharts() {
   if (aumChartInstance) { aumChartInstance.destroy(); aumChartInstance = null; }
   if (allocationChartInstance) { allocationChartInstance.destroy(); allocationChartInstance = null; }
@@ -302,4 +343,5 @@ function destroyCharts() {
   if (lookThroughChartInstance) { lookThroughChartInstance.destroy(); lookThroughChartInstance = null; }
   if (breakdownChartInstance) { breakdownChartInstance.destroy(); breakdownChartInstance = null; }
   if (activeShareChartInstance) { activeShareChartInstance.destroy(); activeShareChartInstance = null; }
+  Object.keys(pieInstances).forEach(k => { pieInstances[k].destroy(); delete pieInstances[k]; });
 }
