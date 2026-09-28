@@ -27,6 +27,9 @@ from holdings_parsers import parse_holdings_file  # noqa: E402
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
 
+# A futures or option line, whose market value never describes what it is exposed to.
+DERIVATIVE_CATEGORY = re.compile(r"derivativ|future|option", re.I)
+
 FILENAME_DATE_PATTERNS = [
     re.compile(r"(\d{4})\.(\d{2})\.(\d{2})"),          # 2026.08.31 - Balanced.XLS
     re.compile(r"_(\d{4})(\d{2})(\d{2})(?:[._]|$)"),   # ADMIN_D_00000_IPD_Daily_20260831.xls
@@ -326,7 +329,11 @@ def holding_row(h):
         "pct": round(h.get("pct") or 0.0, 4), "value": round(h.get("value") or 0.0, 2),
     }
     nominal, price = h.get("nominal"), h.get("price")
-    if nominal and price and abs(row["value"]) < 1.0:
+    # A derivative's market value is its unrealised profit, not its exposure, so it never
+    # describes the position however large it is — an earlier version only kept these where
+    # the value rounded to zero, and a future carrying R494,500 of profit lost its contract
+    # count and could not be sized at all.
+    if nominal and price and (DERIVATIVE_CATEGORY.search(row["category"]) or abs(row["value"]) < 1.0):
         row["nominal"] = nominal
         row["price"] = price
     return row
