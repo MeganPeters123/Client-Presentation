@@ -1217,7 +1217,7 @@ function renderBreakdownSection() {
   document.getElementById("breakdownKeyCol").textContent = breakdownBy === "ccy" ? "Currency" : "Sector";
   document.getElementById("breakdownSubtitle").textContent =
     `${fund} — ${monthLabelFromKey(month)}, by ${breakdownBy === "ccy" ? "trading currency" : "GICS sector"}` +
-    (expandFunds ? " (in-house funds looked through)" : "");
+    (expandFunds ? " (Global Equity Fund looked through)" : "");
 
   const colorFor = (k, i) => BREAKDOWN_MUTED[k] ||
     (breakdownBy === "ccy" ? CURRENCY_COLORS[k] : null) || LOOKTHROUGH_COLORS[k] || PALETTE[i % PALETTE.length];
