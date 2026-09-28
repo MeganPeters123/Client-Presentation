@@ -370,8 +370,11 @@ def parse_ipd_xls(path):
 
 def parse_holdings_file(path):
     """Parse any recognised holdings export. Returns [] for anything unrecognised."""
-    kind = sniff_format(path)
     try:
+        # inside the guard: sniffing opens the file, and a single unreadable one — a
+        # cloud-only placeholder that will not hydrate, a name the OS rejects — used to
+        # raise straight past this and abort the whole multi-month run
+        kind = sniff_format(path)
         if kind == "html":
             return parse_custodian_html(path)
         if kind == "ole2":
