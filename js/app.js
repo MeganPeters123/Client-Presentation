@@ -776,9 +776,17 @@ function computeCompareData() {
   const categories = [...new Set([...snapA.segments.map(s => s.category), ...snapB.segments.map(s => s.category)])];
   const valA = cat => (snapA.segments.find(s => s.category === cat) || {}).value || 0;
   const valB = cat => (snapB.segments.find(s => s.category === cat) || {}).value || 0;
+  // Weights as well as rand. When the fund itself has shrunk every category falls in rand,
+  // which says nothing about whether the allocation moved — a category can drop in value
+  // and still be a larger share of a smaller fund. The percentage-point change is the one
+  // that answers "what did we do", and the rand change is kept beside it for size.
   const rows = categories
-    .map(cat => ({ category: cat, a: valA(cat), b: valB(cat), delta: valB(cat) - valA(cat) }))
-    .sort((a, b) => Math.max(b.a, b.b) - Math.max(a.a, a.b));
+    .map(cat => {
+      const a = valA(cat), b = valB(cat);
+      const pa = (a / snapA.total) * 100, pb = (b / snapB.total) * 100;
+      return { category: cat, a, b, delta: b - a, pctA: pa, pctB: pb, pctDelta: pb - pa };
+    })
+    .sort((a, b) => Math.max(b.pctA, b.pctB) - Math.max(a.pctA, a.pctB));
 
   return { fund, labelA, labelB, totalA: snapA.total, totalB: snapB.total, totalChangePct: ((snapB.total - snapA.total) / snapA.total) * 100, rows };
 }
@@ -825,9 +833,10 @@ function renderCompareSection() {
   document.querySelector("#compareTable tbody").innerHTML = data.rows.map(r => `
     <tr>
       <td>${r.category}</td>
-      <td class="num">${fmtCurrency(r.a)}</td>
-      <td class="num">${fmtCurrency(r.b)}</td>
-      <td class="num ${r.delta > 0 ? "delta-up" : r.delta < 0 ? "delta-down" : ""}">${r.delta > 0 ? "+" : ""}${fmtCurrency(r.delta)}</td>
+      <td class="num">${r.pctA.toFixed(1)}%</td>
+      <td class="num">${r.pctB.toFixed(1)}%</td>
+      <td class="num ${r.pctDelta > 0.05 ? "delta-up" : r.pctDelta < -0.05 ? "delta-down" : ""}">${r.pctDelta > 0 ? "+" : ""}${r.pctDelta.toFixed(1)}</td>
+      <td class="num" style="color:var(--ink-muted);">${r.delta > 0 ? "+" : ""}${fmtCurrency(r.delta)}</td>
     </tr>`).join("");
 }
 
