@@ -76,18 +76,30 @@ const BUCKET_DISPLAY = {
   "Offshore Fixed Income": "Global Fixed Income"
 };
 
+/** The listed side is the custodian's own numbers, so it carries the custodian's own names.
+ *  It read "SA Equity" while the allocation pie and the period comparison — the same figures
+ *  from the same segments — read "JSE-listed Equity", which made a row that ties exactly look
+ *  like a row that does not. */
+const LISTED_DISPLAY = {
+  "SA Equity": "JSE-listed Equity",
+  "Offshore Equity": "Global-listed Equity",
+  "Offshore Cash": "Global Cash",
+  "Offshore Fixed Income": "Global Fixed Income"
+};
+
 /** Stacking and row order across both views — SA-linked first, so the equity block a bar
  *  starts with is the one it splits into on the other bar. */
 const ALLOCATION_ORDER = [
-  "SA Equity", "SA Inc", "Global Equity",
+  "JSE-listed Equity", "SA Inc", "Global Equity", "Global-listed Equity",
   "SA Cash", "Global Cash", "SA Fixed Income", "Global Fixed Income"
 ];
 
-/** Computed buckets folded into the names and groupings the deck uses. */
-function displayBuckets(buckets) {
+/** Computed buckets folded into the names and groupings the deck uses. Pass LISTED_DISPLAY
+ *  for the custodian side, which keeps the custodian's own wording. */
+function displayBuckets(buckets, map = BUCKET_DISPLAY) {
   const out = {};
   Object.entries(buckets || {}).forEach(([k, v]) => {
-    const key = BUCKET_DISPLAY[k] || k;
+    const key = map[k] || k;
     out[key] = (out[key] || 0) + v;
   });
   return out;

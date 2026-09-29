@@ -181,9 +181,11 @@ function renderTradeActivityChart(activity, series) {
    Offshore Equity keys are kept because the engine still computes them; the charts fold both
    into Global Equity, so they carry its colour. */
 const LOOKTHROUGH_COLORS = {
+  "JSE-listed Equity": "#00560a",
   "SA Equity": "#00560a",
   "SA Inc": "#008300",
   "Global Equity": "#2a78d6",
+  "Global-listed Equity": "#2a78d6",
   "Quasi-Offshore": "#2a78d6",
   "Offshore Equity": "#2a78d6",
   "SA Cash": "#eda100",

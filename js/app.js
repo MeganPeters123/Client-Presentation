@@ -950,7 +950,7 @@ function renderLookThroughSection() {
   document.getElementById("lookThroughSubtitle").textContent =
     `${fund} — ${monthLabelFromKey(month)} · ${lt.coverage.toFixed(0)}% of equity has a researched revenue split`;
 
-  const shownListed = displayBuckets(listed);
+  const shownListed = displayBuckets(listed, LISTED_DISPLAY);
   const shownLT = displayBuckets(lt.buckets);
   renderLookThroughChart(
     [{ label: "Listed", buckets: shownListed }, { label: "Look-through", buckets: shownLT }],
