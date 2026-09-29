@@ -951,9 +951,10 @@ function renderAllocationSection() {
     document.getElementById("lookThroughFund"), document.getElementById("lookThroughPeriod")));
 });
 document.getElementById("lookThroughExpand").addEventListener("change", () => {
-  // the allocation pies and the breakdown read the same setting, so all three redraw
+  // the allocation pies, the breakdown and the holdings lists all read this setting
   renderAllocationSection();
   renderLookThroughSection();
+  renderHoldingsSections();
 });
 // the breakdown card reads the same in-house fund setting, so it has to follow it
 document.getElementById("lookThroughExpand").addEventListener("change", renderBreakdownSection);
@@ -1384,7 +1385,9 @@ function renderHoldingsSections() {
   const empty = document.getElementById("holdingsEmpty");
   const body = document.getElementById("holdingsBody");
   const excludeBonds = document.getElementById("holdingsExcludeBonds").checked;
-  const top = computeTopHoldings(fund, current, prior, 10, { excludeBonds });
+  // the same Global Equity Fund choice the allocation cards use, so the page has one basis
+  const expandFunds = document.getElementById("lookThroughExpand").value === "expand";
+  const top = computeTopHoldings(fund, current, prior, 10, { excludeBonds, expandFunds });
   if (!top.length) {
     empty.textContent = `No holdings saved for ${fund} in ${monthLabelFromKey(current)}.`;
     empty.style.display = "block"; body.style.display = "none";
@@ -1397,7 +1400,8 @@ function renderHoldingsSections() {
   const samePeriod = current === prior;
   document.getElementById("holdingsSubtitle").textContent =
     `${fund} — ${monthLabelFromKey(current)}` + (samePeriod ? "" : ` vs ${monthLabelFromKey(prior)}`) +
-    (excludeBonds ? " · equities only" : "");
+    (excludeBonds ? " · equities only" : "") +
+    (expandFunds ? " · Global Equity Fund looked through" : "");
   document.getElementById("topColB").textContent = monthLabelFromKey(current);
   document.getElementById("topColA").textContent = monthLabelFromKey(prior);
 
@@ -1428,7 +1432,8 @@ function renderHoldingsSections() {
 function renderPortfolioChanges(fund, current, prior) {
   const threshold = parseFloat(document.getElementById("changesThreshold").value) || 0;
   const excludeBonds = document.getElementById("holdingsExcludeBonds").checked;
-  const all = computePortfolioChanges(fund, current, prior, 0, { excludeBonds });
+  const expandFunds = document.getElementById("lookThroughExpand").value === "expand";
+  const all = computePortfolioChanges(fund, current, prior, 0, { excludeBonds, expandFunds });
   const shown = {
     entries: all.entries.filter(h => Math.abs(h.change) >= threshold),
     exits: all.exits.filter(h => Math.abs(h.change) >= threshold)
@@ -1437,6 +1442,8 @@ function renderPortfolioChanges(fund, current, prior) {
 
   document.getElementById("portfolioChangesSubtitle").textContent =
     `${fund} — opened and closed between ${monthLabelFromKey(prior)} and ${monthLabelFromKey(current)}` +
+    (excludeBonds ? " · equities only" : "") +
+    (expandFunds ? " · Global Equity Fund looked through" : "") +
     // say so explicitly, so a filtered-out position is never silently missing
     (hidden ? ` · ${hidden} below ${threshold}% hidden` : "");
 

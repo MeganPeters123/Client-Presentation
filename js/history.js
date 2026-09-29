@@ -193,18 +193,41 @@ function isBondLike(h) {
   return /bond|fixed income|treasury|gilt|bill/i.test(h.category || "");
 }
 
-function holdingsByKey(fund, monthKey, { excludeCash = true, excludeBonds = false } = {}) {
+function holdingsByKey(fund, monthKey, { excludeCash = true, excludeBonds = false, expandFunds = false } = {}) {
   const map = new Map();
-  getHoldings(fund, monthKey).forEach(h => {
-    if (excludeCash && isCashLike(h)) return;
-    if (excludeBonds && isBondLike(h)) return;
+
+  function add(h, scale) {
     const k = holdingKey(h);
     if (!k) return;
-    // a security can appear more than once (different classes/accounts) — combine
+    const pct = (h.pct || 0) * scale, value = (h.value || 0) * scale;
+    // a security can appear more than once — different classes, different accounts, or the
+    // same share held directly and again inside a fund we looked through — so combine
     const prev = map.get(k);
-    if (prev) { prev.pct += h.pct || 0; prev.value += h.value || 0; }
-    else map.set(k, { ...h, pct: h.pct || 0, value: h.value || 0 });
-  });
+    if (prev) { prev.pct += pct; prev.value += value; }
+    else map.set(k, { ...h, pct, value });
+  }
+
+  function walk(holdings, scale, visited) {
+    holdings.forEach(h => {
+      if (excludeCash && isCashLike(h)) return;
+      if (excludeBonds && isBondLike(h)) return;
+      // A holding in one of the firm's own funds is not a stock pick; looked through, its
+      // shares join the list and merge with any held directly, which is what the fund
+      // actually owns. resolveFundForHolding lives in lookthrough.js, loaded after this.
+      if (expandFunds && typeof isFundHolding === "function" && isFundHolding(h)) {
+        const target = resolveFundForHolding(h, listFundsWithHoldings());
+        const sub = target && !visited.has(target) && getFundSnapshotAtOrBefore(target, monthKey, null);
+        if (sub && (sub.holdings || []).length) {
+          visited.add(target);
+          walk(sub.holdings, scale * (h.pct || 0) / 100, visited);
+          return;
+        }
+      }
+      add(h, scale);
+    });
+  }
+
+  walk(getHoldings(fund, monthKey), 1, new Set([fund]));
   return map;
 }
 
