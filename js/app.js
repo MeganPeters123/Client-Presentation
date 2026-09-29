@@ -1347,7 +1347,8 @@ function renderSectorAssignment(unclassified) {
 /* ---------- Top 10 Holdings + Portfolio Changes ---------- */
 document.getElementById("holdingsFundSelector").addEventListener("change", () =>
   onPositionSelectionChange(document.getElementById("holdingsFundSelector"), null));
-["holdingsPeriodA", "holdingsPeriodB", "holdingsExcludeBonds", "holdingsLookThrough"].forEach(id => {
+["holdingsPeriodA", "holdingsPeriodB", "holdingsExcludeBonds", "holdingsLookThrough",
+ "holdingsRegion"].forEach(id => {
   document.getElementById(id).addEventListener("change", renderHoldingsSections);
 });
 
@@ -1387,7 +1388,8 @@ function renderHoldingsSections() {
   // its own control rather than the allocation cards' — a deck often wants a looked-through
   // allocation beside a top ten as reported, and both subtitles say which basis they are on
   const expandFunds = document.getElementById("holdingsLookThrough").checked;
-  const top = computeTopHoldings(fund, current, prior, 10, { excludeBonds, expandFunds });
+  const region = document.getElementById("holdingsRegion").value;
+  const top = computeTopHoldings(fund, current, prior, 10, { excludeBonds, expandFunds, region });
   if (!top.length) {
     empty.textContent = `No holdings saved for ${fund} in ${monthLabelFromKey(current)}.`;
     empty.style.display = "block"; body.style.display = "none";
@@ -1432,7 +1434,8 @@ function renderPortfolioChanges(fund, current, prior) {
   const threshold = parseFloat(document.getElementById("changesThreshold").value) || 0;
   const excludeBonds = document.getElementById("holdingsExcludeBonds").checked;
   const expandFunds = document.getElementById("holdingsLookThrough").checked;
-  const all = computePortfolioChanges(fund, current, prior, 0, { excludeBonds, expandFunds });
+  const region = document.getElementById("holdingsRegion").value;
+  const all = computePortfolioChanges(fund, current, prior, 0, { excludeBonds, expandFunds, region });
   const shown = {
     entries: all.entries.filter(h => Math.abs(h.change) >= threshold),
     exits: all.exits.filter(h => Math.abs(h.change) >= threshold)

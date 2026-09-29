@@ -206,10 +206,25 @@ function isBondLike(h) {
   return /bond|fixed income|treasury|gilt|\bbill\b/i.test(h.category || "");
 }
 
-function holdingsByKey(fund, monthKey, { excludeCash = true, excludeBonds = false, expandFunds = false } = {}) {
+/** SA or global, by the same rule the allocation uses: the trading currency, falling back to
+ *  what the category implies for the formats that carry no currency. Applies to bonds as
+ *  much as shares, so "SA only" is the whole South African book. */
+function holdingSide(h) {
+  const ccy = typeof holdingCcy === "function"
+    ? holdingCcy(h) : String(h.ccy || "").trim().toUpperCase();
+  return ccy === "ZAR" ? "sa" : "global";
+}
+
+function holdingsByKey(fund, monthKey,
+                       { excludeCash = true, excludeBonds = false, expandFunds = false,
+                         region = "all" } = {}) {
   const map = new Map();
 
   function add(h, scale) {
+    // tested here rather than in the walk: a fund wrapper carries its own currency, so
+    // filtering before expansion would drop a USD-denominated fund and take its JSE
+    // holdings with it. Leaves are what get judged.
+    if (region !== "all" && holdingSide(h) !== region) return;
     const k = holdingKey(h);
     if (!k) return;
     const pct = (h.pct || 0) * scale, value = (h.value || 0) * scale;
