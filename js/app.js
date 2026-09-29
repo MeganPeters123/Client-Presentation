@@ -1398,10 +1398,9 @@ function renderHoldingsSections() {
   changesCard.style.display = "block";
 
   const samePeriod = current === prior;
+  // the two tick boxes sit in this card's own header, so the subtitle does not repeat them
   document.getElementById("holdingsSubtitle").textContent =
-    `${fund} — ${monthLabelFromKey(current)}` + (samePeriod ? "" : ` vs ${monthLabelFromKey(prior)}`) +
-    (excludeBonds ? " · equities only" : "") +
-    (expandFunds ? " · Global Equity Fund looked through" : "");
+    `${fund} — ${monthLabelFromKey(current)}` + (samePeriod ? "" : ` vs ${monthLabelFromKey(prior)}`);
   document.getElementById("topColB").textContent = monthLabelFromKey(current);
   document.getElementById("topColA").textContent = monthLabelFromKey(prior);
 
