@@ -181,8 +181,21 @@ function holdingKey(h) {
 
 /** Cash, call accounts, money-market funds and fee accruals aren't "holdings" for a
  *  top-10 or a portfolio-changes list — they're the residual the portfolio sits in. */
+/** Cash and the instruments the firm treats as cash.
+ *
+ *  Treasury bills and NCDs are cash management, not positions: they are bought to mature and
+ *  replaced when they do, so a list of portfolio changes fills with them. One fund showed 63
+ *  entries and exits over a year of which 47 were bills and NCDs rolling.
+ *
+ *  They cannot be caught by category, because the same instrument is filed under "Money
+ *  Market" in one fund and "SA Fixed Income" in another — 44 bills and 71 NCDs sit under the
+ *  latter. So the name decides. Real bonds are untouched by this: an R2032 is a position and
+ *  still shows, unless "Equities only" is on. */
+const CASH_CATEGORY = /cash|money market|\bMMA\b/i;
+const CASH_INSTRUMENT = /\bTB\b|\bNCD\b|treasury bill|negotiable certificate/i;
+
 function isCashLike(h) {
-  return /cash|money market|MMA/i.test(h.category || "");
+  return CASH_CATEGORY.test(h.category || "") || CASH_INSTRUMENT.test(h.name || "");
 }
 
 /** Bonds and bills. A fund holding one R2032 line at 12.9% has it sitting above every share
@@ -190,7 +203,7 @@ function isCashLike(h) {
  *  the toggle rather than a fixed rule. The three source formats word this differently:
  *  "Bonds" from the custodian, "SA Fixed Income" from the flat CSV. */
 function isBondLike(h) {
-  return /bond|fixed income|treasury|gilt|bill/i.test(h.category || "");
+  return /bond|fixed income|treasury|gilt|\bbill\b/i.test(h.category || "");
 }
 
 function holdingsByKey(fund, monthKey, { excludeCash = true, excludeBonds = false, expandFunds = false } = {}) {
