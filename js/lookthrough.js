@@ -303,6 +303,9 @@ function clearSaIncSource() {
 function resolveFundForHolding(h, funds) {
   const manual = saIncStore.funds[rawTicker(h.ticker)];
   if (manual) return manual;
+  // the ticker is the reliable identifier — names are abbreviated differently per source
+  const byTicker = fundFromTicker(h.ticker);
+  if (byTicker) return byTicker;
   const name = String(h.name || "").trim().toLowerCase();
   if (!name) return null;
   const exact = funds.find(f => f.toLowerCase() === name);
@@ -312,8 +315,31 @@ function resolveFundForHolding(h, funds) {
   return null;
 }
 
+/** Tickers by which the firm's own funds appear inside other funds' holdings.
+ *
+ *  The category alone does not find them. Only the custodian HTML files these as "Collective
+ *  Investment Schemes"; the IPD extract puts the same holding under "Foreign (non-South
+ *  African rand MMA)" and the flat CSV under "Global-listed Equity", so a category test
+ *  misses both and the look-through quietly does nothing — one of them an 11% position.
+ *  Names do not rescue it either: one file writes "AYLETT GBL EQY FD-BUSDACC".
+ *
+ *  The share class suffix varies (A2, B3, B, BID), so these match on the stem. */
+const IN_HOUSE_FUND_TICKERS = [
+  [/^PGAGEF/i, "Aylett Global Equity Fund"],
+  [/^AGFF/i, "Aylett Global EQ Prescient FF"]
+];
+
+/** The in-house fund a ticker names, if that fund is one we actually hold holdings for. */
+function fundFromTicker(ticker) {
+  const t = rawTicker(ticker);
+  if (!t) return null;
+  const hit = IN_HOUSE_FUND_TICKERS.find(([re]) => re.test(t));
+  if (!hit) return null;
+  return listFundsWithHoldings().includes(hit[1]) ? hit[1] : null;
+}
+
 function isFundHolding(h) {
-  return FUND_CATEGORY.test(h.category || "");
+  return FUND_CATEGORY.test(h.category || "") || !!fundFromTicker(h.ticker);
 }
 
 function emptyBuckets(keys) {
