@@ -839,6 +839,16 @@ function renderAllocationSection() {
   card.style.display = "block";
   document.getElementById("allocationSubtitle").textContent = label;
 
+  // Every caption names what it covers. These pies follow the selector at the top of the
+  // page, which can be the whole book, while the cards below follow a single fund — so two
+  // currency pies can sit on one screen showing different numbers, both correct. Saying
+  // "All funds" or the fund's name on each one is what tells them apart.
+  const scope = selectedFund === "all" ? "All funds" : selectedFund;
+  const caption = what => `${what} · ${scope}`;
+
+  document.getElementById("assetClassPieSub").textContent = caption("As the custodian reports it");
+  document.getElementById("currencyPieSub").textContent = caption("Trading currency, cash included");
+
   const colorFor = (k, i) => LOOKTHROUGH_COLORS[k] || CURRENCY_COLORS[k] || colorForCategory(k, i);
 
   // 1. asset class as the custodian reports it — local against offshore
@@ -875,7 +885,7 @@ function renderAllocationSection() {
       ALLOCATION_ORDER.filter(k => (lt.buckets[k] || 0) > 0.005)
         .map(k => ({ key: k, weight: lt.buckets[k] })), colorFor);
     document.getElementById("lookThroughPieSub").textContent =
-      `Split by where the revenue is earned · ${lt.coverage.toFixed(0)}% of equity researched`;
+      caption(`Where the revenue is earned · ${lt.coverage.toFixed(0)}% researched`);
   } else {
     ltEmpty.style.display = "";
     ltWrap.style.display = "none";
