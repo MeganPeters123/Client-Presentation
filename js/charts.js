@@ -176,16 +176,21 @@ function renderTradeActivityChart(activity, series) {
 }
 
 /* SA-linked buckets in greens, offshore in blues, so the split reads before the legend does. */
+/* Green for the SA block, blue for global, amber for cash, orange for fixed income — the same
+   language the allocation donut and the look-through bars both speak. The Quasi-Offshore and
+   Offshore Equity keys are kept because the engine still computes them; the charts fold both
+   into Global Equity, so they carry its colour. */
 const LOOKTHROUGH_COLORS = {
-  // one green family for the SA block: the listed SA bar splits into SA Inc plus Quasi-Offshore,
-  // so keeping the hue and changing only the shade shows where that block went
   "SA Equity": "#00560a",
   "SA Inc": "#008300",
-  "Quasi-Offshore": "#7cc351",
+  "Global Equity": "#2a78d6",
+  "Quasi-Offshore": "#2a78d6",
   "Offshore Equity": "#2a78d6",
   "SA Cash": "#eda100",
+  "Global Cash": "#8FAADC",
   "Offshore Cash": "#8FAADC",
   "SA Fixed Income": "#eb6834",
+  "Global Fixed Income": "#4a3aa7",
   "Offshore Fixed Income": "#4a3aa7"
 };
 

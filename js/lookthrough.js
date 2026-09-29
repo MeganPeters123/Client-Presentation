@@ -62,12 +62,36 @@ const LISTED_BUCKETS = [
   "SA Equity", "Offshore Equity",
   "SA Cash", "Offshore Cash", "SA Fixed Income", "Offshore Fixed Income"
 ];
+/** How the buckets are presented, as distinct from how they are computed.
+ *
+ *  The engine keeps Quasi-Offshore apart from Offshore Equity, because the difference — the
+ *  offshore earnings of a JSE-listed company versus a share listed offshore — is the whole
+ *  point of the revenue research, and the per-position table still shows it. The deck adds
+ *  them together and calls the result Global Equity, so that is what the charts show.
+ *  "Offshore" reads as "Global" throughout, matching the rest of the house wording. */
+const BUCKET_DISPLAY = {
+  "Quasi-Offshore": "Global Equity",
+  "Offshore Equity": "Global Equity",
+  "Offshore Cash": "Global Cash",
+  "Offshore Fixed Income": "Global Fixed Income"
+};
+
 /** Stacking and row order across both views — SA-linked first, so the equity block a bar
  *  starts with is the one it splits into on the other bar. */
 const ALLOCATION_ORDER = [
-  "SA Equity", "SA Inc", "Quasi-Offshore", "Offshore Equity",
-  "SA Cash", "Offshore Cash", "SA Fixed Income", "Offshore Fixed Income"
+  "SA Equity", "SA Inc", "Global Equity",
+  "SA Cash", "Global Cash", "SA Fixed Income", "Global Fixed Income"
 ];
+
+/** Computed buckets folded into the names and groupings the deck uses. */
+function displayBuckets(buckets) {
+  const out = {};
+  Object.entries(buckets || {}).forEach(([k, v]) => {
+    const key = BUCKET_DISPLAY[k] || k;
+    out[key] = (out[key] || 0) + v;
+  });
+  return out;
+}
 
 /** The eleven GICS sectors. No holdings file we receive carries GICS — the IPD extracts
  *  carry ICB ("Basic Materials", "Travel and Leisure"), which is a different scheme, and the

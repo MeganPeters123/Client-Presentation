@@ -890,9 +890,10 @@ function renderAllocationSection() {
   if (lt) {
     ltEmpty.style.display = "none";
     ltWrap.style.display = "";
+    const shown = displayBuckets(lt.buckets);
     renderPie("lookThroughPie", "lookThroughPieLegend",
-      ALLOCATION_ORDER.filter(k => (lt.buckets[k] || 0) > 0.005)
-        .map(k => ({ key: k, weight: lt.buckets[k] })), colorFor);
+      ALLOCATION_ORDER.filter(k => (shown[k] || 0) > 0.005)
+        .map(k => ({ key: k, weight: shown[k] })), colorFor);
     document.getElementById("lookThroughPieSub").textContent =
       caption(`Where the revenue is earned · ${lt.coverage.toFixed(0)}% researched`);
   } else {
@@ -949,27 +950,29 @@ function renderLookThroughSection() {
   document.getElementById("lookThroughSubtitle").textContent =
     `${fund} — ${monthLabelFromKey(month)} · ${lt.coverage.toFixed(0)}% of equity has a researched revenue split`;
 
+  const shownListed = displayBuckets(listed);
+  const shownLT = displayBuckets(lt.buckets);
   renderLookThroughChart(
-    [{ label: "Listed", buckets: listed }, { label: "Look-through", buckets: lt.buckets }],
+    [{ label: "Listed", buckets: shownListed }, { label: "Look-through", buckets: shownLT }],
     ALLOCATION_ORDER
   );
 
   // one row per category on either side, so a bucket that only exists after the look-through
-  // (Quasi-Offshore) still lines up against the listed column it came out of
+  // (Global Equity) still lines up against the listed column it came out of
   const rowKeys = ALLOCATION_ORDER
-    .filter(k => (listed[k] || 0) > 0.005 || (lt.buckets[k] || 0) > 0.005);
+    .filter(k => (shownListed[k] || 0) > 0.005 || (shownLT[k] || 0) > 0.005);
   const cell = v => (v > 0.005 ? v.toFixed(1) + "%" : "—");
   document.querySelector("#lookThroughTable tbody").innerHTML = rowKeys.map((k, i) => `
     <tr>
       <td><span class="legend-swatch" style="display:inline-block;background:${LOOKTHROUGH_COLORS[k] || colorForCategory(k, i)};margin-right:7px;"></span>${k}</td>
-      <td class="num">${cell(listed[k] || 0)}</td>
-      <td class="num">${cell(lt.buckets[k] || 0)}</td>
+      <td class="num">${cell(shownListed[k] || 0)}</td>
+      <td class="num">${cell(shownLT[k] || 0)}</td>
     </tr>`).join("");
   const sum = o => Object.values(o).reduce((s, v) => s + v, 0);
   document.querySelector("#lookThroughTable tfoot").innerHTML = `
     <tr><th>Total</th>
-      <th style="text-align:right;">${sum(listed).toFixed(1)}%</th>
-      <th style="text-align:right;">${sum(lt.buckets).toFixed(1)}%</th></tr>`;
+      <th style="text-align:right;">${sum(shownListed).toFixed(1)}%</th>
+      <th style="text-align:right;">${sum(shownLT).toFixed(1)}%</th></tr>`;
 
   const note = document.getElementById("lookThroughExpandedNote");
   const parts = [];
@@ -1045,7 +1048,7 @@ function renderLookThroughPositions(positions) {
       <td class="num"><select class="listing-input${p.listingOverridden ? " overridden" : ""}" data-ticker="${t}"
            title="${p.listingOverridden ? "Overridden by you" : "From the trading currency (" + escAttr(p.ccy || "?") + ")"}">
         <option value="SA"${sel("SA")}>SA</option>
-        <option value="Offshore"${sel("Offshore")}>Offshore</option>
+        <option value="Offshore"${sel("Offshore")}>Global</option>
       </select></td>
     </tr>`;
   }).join("");
@@ -1110,7 +1113,7 @@ function renderActiveShareSection() {
   const latest = series[series.length - 1];
   document.getElementById("activeShareSubtitle").textContent =
     `${fund} — ${monthLabelFromKey(latest.month)} vs ${latest.label}` +
-    (includeOffshore ? ", offshore counted as active" : ", SA sleeve only");
+    (includeOffshore ? ", global counted as active" : ", SA sleeve only");
 
   const kpi = (label, value, sub) =>
     `<div class="kpi"><div class="label">${label}</div><div class="value">${value}</div>
@@ -1118,7 +1121,7 @@ function renderActiveShareSection() {
   const futuresApplied = latest.futures.filter(f => f.applied);
   document.getElementById("activeShareKpis").innerHTML =
     kpi("Active share", `${latest.value.toFixed(1)}%`, monthLabelFromKey(latest.month)) +
-    kpi("Offshore", `${latest.offshorePct.toFixed(1)}%`,
+    kpi("Global", `${latest.offshorePct.toFixed(1)}%`,
         includeOffshore ? "counted as active" : "excluded from this view") +
     kpi("Index futures", futuresApplied.length
         ? futuresApplied.map(f => `${f.contracts > 0 ? "+" : ""}${f.contracts}`).join(", ")
