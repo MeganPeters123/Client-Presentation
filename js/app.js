@@ -1347,7 +1347,7 @@ function renderSectorAssignment(unclassified) {
 /* ---------- Top 10 Holdings + Portfolio Changes ---------- */
 document.getElementById("holdingsFundSelector").addEventListener("change", () =>
   onPositionSelectionChange(document.getElementById("holdingsFundSelector"), null));
-["holdingsPeriodA", "holdingsPeriodB"].forEach(id => {
+["holdingsPeriodA", "holdingsPeriodB", "holdingsExcludeBonds"].forEach(id => {
   document.getElementById(id).addEventListener("change", renderHoldingsSections);
 });
 
@@ -1383,7 +1383,8 @@ function renderHoldingsSections() {
   const current = selB.value, prior = selA.value;
   const empty = document.getElementById("holdingsEmpty");
   const body = document.getElementById("holdingsBody");
-  const top = computeTopHoldings(fund, current, prior, 10);
+  const excludeBonds = document.getElementById("holdingsExcludeBonds").checked;
+  const top = computeTopHoldings(fund, current, prior, 10, { excludeBonds });
   if (!top.length) {
     empty.textContent = `No holdings saved for ${fund} in ${monthLabelFromKey(current)}.`;
     empty.style.display = "block"; body.style.display = "none";
@@ -1395,7 +1396,8 @@ function renderHoldingsSections() {
 
   const samePeriod = current === prior;
   document.getElementById("holdingsSubtitle").textContent =
-    `${fund} — ${monthLabelFromKey(current)}` + (samePeriod ? "" : ` vs ${monthLabelFromKey(prior)}`);
+    `${fund} — ${monthLabelFromKey(current)}` + (samePeriod ? "" : ` vs ${monthLabelFromKey(prior)}`) +
+    (excludeBonds ? " · equities only" : "");
   document.getElementById("topColB").textContent = monthLabelFromKey(current);
   document.getElementById("topColA").textContent = monthLabelFromKey(prior);
 
@@ -1425,7 +1427,8 @@ function renderHoldingsSections() {
 
 function renderPortfolioChanges(fund, current, prior) {
   const threshold = parseFloat(document.getElementById("changesThreshold").value) || 0;
-  const all = computePortfolioChanges(fund, current, prior);
+  const excludeBonds = document.getElementById("holdingsExcludeBonds").checked;
+  const all = computePortfolioChanges(fund, current, prior, 0, { excludeBonds });
   const shown = {
     entries: all.entries.filter(h => Math.abs(h.change) >= threshold),
     exits: all.exits.filter(h => Math.abs(h.change) >= threshold)

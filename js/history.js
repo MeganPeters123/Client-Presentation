@@ -182,13 +182,22 @@ function holdingKey(h) {
 /** Cash, call accounts, money-market funds and fee accruals aren't "holdings" for a
  *  top-10 or a portfolio-changes list — they're the residual the portfolio sits in. */
 function isCashLike(h) {
-  return /cash/i.test(h.category || "");
+  return /cash|money market|MMA/i.test(h.category || "");
 }
 
-function holdingsByKey(fund, monthKey, { excludeCash = true } = {}) {
+/** Bonds and bills. A fund holding one R2032 line at 12.9% has it sitting above every share
+ *  it owns, which is right for the fund and wrong for a slide about stock picking — hence
+ *  the toggle rather than a fixed rule. The three source formats word this differently:
+ *  "Bonds" from the custodian, "SA Fixed Income" from the flat CSV. */
+function isBondLike(h) {
+  return /bond|fixed income|treasury|gilt|bill/i.test(h.category || "");
+}
+
+function holdingsByKey(fund, monthKey, { excludeCash = true, excludeBonds = false } = {}) {
   const map = new Map();
   getHoldings(fund, monthKey).forEach(h => {
     if (excludeCash && isCashLike(h)) return;
+    if (excludeBonds && isBondLike(h)) return;
     const k = holdingKey(h);
     if (!k) return;
     // a security can appear more than once (different classes/accounts) — combine
@@ -200,9 +209,9 @@ function holdingsByKey(fund, monthKey, { excludeCash = true } = {}) {
 }
 
 /** Top N by current weight, with the comparison period's weight alongside. */
-function computeTopHoldings(fund, currentMonth, priorMonth, n = 10) {
-  const now = holdingsByKey(fund, currentMonth);
-  const before = holdingsByKey(fund, priorMonth);
+function computeTopHoldings(fund, currentMonth, priorMonth, n = 10, opts = {}) {
+  const now = holdingsByKey(fund, currentMonth, opts);
+  const before = holdingsByKey(fund, priorMonth, opts);
   return [...now.values()]
     .sort((a, b) => b.pct - a.pct)
     .slice(0, n)
@@ -215,9 +224,9 @@ function computeTopHoldings(fund, currentMonth, priorMonth, n = 10) {
 
 /** Positions opened since the comparison period, and those closed out of it.
  *  minPct of 0 returns everything, including moves that round to 0.0%. */
-function computePortfolioChanges(fund, currentMonth, priorMonth, minPct = 0) {
-  const now = holdingsByKey(fund, currentMonth);
-  const before = holdingsByKey(fund, priorMonth);
+function computePortfolioChanges(fund, currentMonth, priorMonth, minPct = 0, opts = {}) {
+  const now = holdingsByKey(fund, currentMonth, opts);
+  const before = holdingsByKey(fund, priorMonth, opts);
 
   const entries = [...now.values()]
     .filter(h => !before.has(holdingKey(h)) && h.pct >= minPct)
