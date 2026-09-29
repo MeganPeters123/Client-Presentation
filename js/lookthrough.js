@@ -528,7 +528,9 @@ function computeBreakdown(fund, monthKey, { by = "ccy", expandFunds = true } = {
 function computeLookThroughConsolidated(monthKey, opts = {}) {
   const buckets = emptyBuckets(LOOKTHROUGH_BUCKETS);
   const listed = emptyBuckets(LISTED_BUCKETS);
-  let total = 0, covered = 0, equityWeight = 0, mappedWeight = 0;
+  const positions = new Map();
+  const futuresApplied = [], futuresUnsized = [], expanded = [], unresolvedFunds = [];
+  let total = 0, equityWeight = 0, mappedWeight = 0;
   const funds = [];
 
   listFundsWithHoldings().forEach(fund => {
@@ -540,16 +542,30 @@ function computeLookThroughConsolidated(monthKey, opts = {}) {
     funds.push(fund);
     Object.entries(lt.buckets).forEach(([k, v]) => { buckets[k] += v * snap.total / 100; });
     Object.entries(lt.listed).forEach(([k, v]) => { listed[k] += v * snap.total / 100; });
-    const eq = lt.coverage != null ? snap.total : 0;
-    equityWeight += eq;
-    mappedWeight += (lt.coverage || 0) / 100 * eq;
-    covered += snap.total;
+    equityWeight += snap.total;
+    mappedWeight += (lt.coverage || 0) / 100 * snap.total;
+    // positions too, in rand, so a firm-wide view can show which holdings still need a split
+    lt.positions.forEach(p => {
+      const key = rawTicker(p.ticker) || p.name;
+      const prev = positions.get(key);
+      const rand = (p.weight / 100) * snap.total;
+      if (prev) prev.rand += rand;
+      else positions.set(key, { ...p, rand });
+    });
+    lt.futuresApplied.forEach(f => futuresApplied.push({ ...f, fund }));
+    lt.futuresUnsized.forEach(f => futuresUnsized.push({ ...f, fund }));
+    lt.expanded.forEach(e => expanded.push({ ...e, fund: e.fund }));
+    lt.unresolvedFunds.forEach(e => unresolvedFunds.push(e));
   });
 
   if (!total) return null;
   const pct = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, (v / total) * 100]));
   return {
     buckets: pct(buckets), listed: pct(listed), total, funds,
+    positions: [...positions.values()]
+      .map(p => ({ ...p, weight: (p.rand / total) * 100 }))
+      .sort((a, b) => b.weight - a.weight),
+    futuresApplied, futuresUnsized, expanded, unresolvedFunds,
     coverage: equityWeight ? (mappedWeight / equityWeight) * 100 : 0
   };
 }

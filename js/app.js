@@ -32,25 +32,38 @@ function defaultPositionFund(funds) {
   return funds[0];
 }
 
-/** Wires a card's fund/period selectors to the shared choice. */
-function syncPositionSelectors(fundSel, periodSel) {
-  const funds = listFundsWithHoldings();
-  fundSel.innerHTML = funds.map(f => `<option value="${escAttr(f)}">${f}</option>`).join("");
-  fundSel.value = defaultPositionFund(funds);
-  positionFund = fundSel.value;
+/** Wires a card's fund/period selectors to the shared choice.
+ *
+ *  "All Funds" is one of the choices rather than a separate control, so the allocation pies
+ *  and the cards below can never be on different scopes at once — which they were, and which
+ *  made figures that tie exactly look like figures that do not. */
+const ALL_FUNDS = "__all__";
 
-  if (!periodSel) return { fund: positionFund, month: null };
-  const months = listHoldingMonthsForFund(positionFund);   // newest first
+function syncPositionSelectors(fundSel, periodSel, { allowAll = true } = {}) {
+  const funds = listFundsWithHoldings();
+  const opts = (allowAll ? [`<option value="${ALL_FUNDS}">All Funds (Consolidated)</option>`] : [])
+    .concat(funds.map(f => `<option value="${escAttr(f)}">${f}</option>`));
+  fundSel.innerHTML = opts.join("");
+  const wanted = positionFund && (positionFund === ALL_FUNDS || funds.includes(positionFund))
+    ? positionFund : defaultPositionFund(funds);
+  // a card that cannot do consolidated still follows the shared month, but shows one fund
+  fundSel.value = (wanted === ALL_FUNDS && !allowAll) ? defaultPositionFund(funds) : wanted;
+  if (allowAll) positionFund = fundSel.value;
+
+  if (!periodSel) return { fund: fundSel.value, month: positionMonth };
+  const months = fundSel.value === ALL_FUNDS
+    ? listAllPeriodMonths() : listHoldingMonthsForFund(fundSel.value);   // newest first
   periodSel.innerHTML = months.map(m => `<option value="${m}">${monthLabelFromKey(m)}</option>`).join("");
   periodSel.value = months.includes(positionMonth) ? positionMonth : months[0];
   positionMonth = periodSel.value;
-  return { fund: positionFund, month: positionMonth };
+  return { fund: fundSel.value, month: positionMonth };
 }
 
 /** Any card's selector changing moves them all, so the page always shows one fund. */
 function onPositionSelectionChange(fundSel, periodSel) {
   positionFund = fundSel.value;
   if (periodSel) positionMonth = periodSel.value;
+  renderAllocationSection();
   renderLookThroughSection();
   renderActiveShareSection();
   renderBreakdownSection();
@@ -843,16 +856,25 @@ function renderCompareSection() {
 /* ---------- Allocation section ---------- */
 function renderAllocationSection() {
   const card = document.getElementById("allocationCard");
-  const { segments, label } = getActiveAllocationSegments();
+  if (!listFundsWithHoldings().length && !listAllPeriodMonths().length) { card.style.display = "none"; return; }
+  const sel = syncPositionSelectors(document.getElementById("allocationFund"),
+                                    document.getElementById("allocationPeriod"));
+  const allocMonth = sel.month;
+  if (!allocMonth) { card.style.display = "none"; return; }
+  const segSnap = positionFund === ALL_FUNDS
+    ? getConsolidatedAtPeriod(allocMonth)
+    : getFundSnapshotAtOrBefore(positionFund, allocMonth);
+  const segments = segSnap ? segmentsFromSnapshot(segSnap) : [];
   if (!segments.length) { card.style.display = "none"; return; }
   card.style.display = "block";
-  document.getElementById("allocationSubtitle").textContent = label;
+  document.getElementById("allocationSubtitle").textContent =
+    `${positionFund === ALL_FUNDS ? "All funds" : positionFund} — ${monthLabelFromKey(allocMonth)}`;
 
   // Every caption names what it covers. These pies follow the selector at the top of the
   // page, which can be the whole book, while the cards below follow a single fund — so two
   // currency pies can sit on one screen showing different numbers, both correct. Saying
   // "All funds" or the fund's name on each one is what tells them apart.
-  const scope = selectedFund === "all" ? "All funds" : selectedFund;
+  const scope = positionFund === ALL_FUNDS ? "All funds" : positionFund;
   const caption = what => `${what} · ${scope}`;
 
   document.getElementById("assetClassPieSub").textContent = caption("As the custodian reports it");
@@ -860,33 +882,41 @@ function renderAllocationSection() {
 
   const colorFor = (k, i) => LOOKTHROUGH_COLORS[k] || CURRENCY_COLORS[k] || colorForCategory(k, i);
 
-  // 1. asset class as the custodian reports it — local against offshore
-  const total = segments.reduce((s, x) => s + x.value, 0);
-  renderPie("allocationChart", "allocationLegend",
-    segments.map(x => ({ key: x.category, weight: total ? (x.value / total) * 100 : 0 })), colorFor);
+  const expandFundsEarly = document.getElementById("lookThroughExpand").value === "expand";
+  const ltAll = positionFund === ALL_FUNDS
+    ? computeLookThroughConsolidated(allocMonth, { expandFunds: expandFundsEarly })
+    : computeLookThrough(positionFund, allocMonth, { expandFunds: expandFundsEarly });
 
-  document.querySelector("#allocationTable tbody").innerHTML = segments.map((x, i) => `
+  // 1. asset class on the listed side. This used the snapshot's raw segments while the
+  // look-through card's Listed column honoured the Global Equity Fund setting, so the same
+  // row read 35.0% here and 36.1% there. Both now come from the same place.
+  const total = segSnap.total;
+  const listedShown = ltAll ? displayBuckets(ltAll.listed, LISTED_DISPLAY) : null;
+  const classRows = listedShown
+    ? ALLOCATION_ORDER.filter(k => (listedShown[k] || 0) > 0.005)
+        .map(k => ({ key: k, weight: listedShown[k], value: (listedShown[k] / 100) * total }))
+    : segments.map(x => ({ key: x.category, weight: x.pct, value: x.value }));
+
+  renderPie("allocationChart", "allocationLegend", classRows, colorFor);
+
+  document.querySelector("#allocationTable tbody").innerHTML = classRows.map((x, i) => `
     <tr>
-      <td><span class="legend-swatch" style="display:inline-block;background:${colorFor(x.category, i)};margin-right:7px;"></span>${x.category}</td>
+      <td><span class="legend-swatch" style="display:inline-block;background:${colorFor(x.key, i)};margin-right:7px;"></span>${x.key}</td>
       <td class="num">${fmtCurrency(x.value)}</td>
-      <td class="num">${x.pct.toFixed(1)}%</td>
+      <td class="num">${x.weight.toFixed(1)}%</td>
     </tr>`).join("");
 
   // The other two read position-level data, which only saved months carry, so they follow
   // the same fund but fall back to the newest saved month on "Current Upload".
-  const months = listAllPeriodMonths();
-  const month = selectedPeriod !== "current" && months.includes(selectedPeriod) ? selectedPeriod : months[0];
+  const month = positionMonth || listAllPeriodMonths()[0];
   const expandFunds = document.getElementById("lookThroughExpand").value === "expand";
-  const oneFund = selectedFund !== "all";
+  const oneFund = positionFund !== ALL_FUNDS;
   const counts = saIncCounts();
 
   // 2. the same buckets the look-through card uses
   const ltEmpty = document.getElementById("lookThroughPieEmpty");
   const ltWrap = document.getElementById("lookThroughPie").parentElement;
-  const lt = month && (counts.tickers || counts.manual)
-    ? (oneFund ? computeLookThrough(selectedFund, month, { expandFunds })
-               : computeLookThroughConsolidated(month, { expandFunds }))
-    : null;
+  const lt = (counts.tickers || counts.manual) ? ltAll : null;
   if (lt) {
     ltEmpty.style.display = "none";
     ltWrap.style.display = "";
@@ -904,18 +934,27 @@ function renderAllocationSection() {
 
   // 3. currency
   const bd = month
-    ? (oneFund ? computeBreakdown(selectedFund, month, { by: "ccy", expandFunds })
+    ? (oneFund ? computeBreakdown(positionFund, month, { by: "ccy", expandFunds })
                : computeBreakdownConsolidated(month, { by: "ccy", expandFunds }))
     : null;
   renderPie("currencyPie", "currencyPieLegend", bd ? bd.rows : [], colorFor);
 }
 
 /* ---------- Asset Allocation look-through ---------- */
+["allocationFund", "allocationPeriod"].forEach(id => {
+  document.getElementById(id).addEventListener("change", () => onPositionSelectionChange(
+    document.getElementById("allocationFund"), document.getElementById("allocationPeriod")));
+});
+
 ["lookThroughFund", "lookThroughPeriod"].forEach(id => {
   document.getElementById(id).addEventListener("change", () => onPositionSelectionChange(
     document.getElementById("lookThroughFund"), document.getElementById("lookThroughPeriod")));
 });
-document.getElementById("lookThroughExpand").addEventListener("change", renderLookThroughSection);
+document.getElementById("lookThroughExpand").addEventListener("change", () => {
+  // the allocation pies and the breakdown read the same setting, so all three redraw
+  renderAllocationSection();
+  renderLookThroughSection();
+});
 // the breakdown card reads the same in-house fund setting, so it has to follow it
 document.getElementById("lookThroughExpand").addEventListener("change", renderBreakdownSection);
 
@@ -944,7 +983,10 @@ function renderLookThroughSection() {
   empty.style.display = "none"; body.style.display = "block";
 
   const expandFunds = document.getElementById("lookThroughExpand").value === "expand";
-  const lt = computeLookThrough(fund, month, { expandFunds });
+  const lt = fund === ALL_FUNDS
+    ? computeLookThroughConsolidated(month, { expandFunds })
+    : computeLookThrough(fund, month, { expandFunds });
+  if (!lt) { card.style.display = "none"; return; }
   const listed = lt.listed;
 
   document.getElementById("lookThroughSubtitle").textContent =
@@ -995,9 +1037,9 @@ function renderLookThroughSection() {
   });
   // the listed bar reflects the fund look-through and any listing calls made below, so say
   // where it has moved away from what the custodian statement itself reported
-  const custodian = computeCustodianAllocation(fund, month);
-  const drift = (listed["SA Equity"] || 0) - (custodian["SA Equity"] || 0);
-  if (Math.abs(drift) > 0.005) {
+  const custodian = fund === ALL_FUNDS ? null : computeCustodianAllocation(fund, month);
+  const drift = custodian ? (listed["SA Equity"] || 0) - (custodian["SA Equity"] || 0) : 0;
+  if (custodian && Math.abs(drift) > 0.005) {
     parts.push(`The custodian reports SA-listed equity at ${custodian["SA Equity"].toFixed(1)}%; ` +
       `shown here as ${listed["SA Equity"].toFixed(1)}% (${drift > 0 ? "+" : ""}${drift.toFixed(1)}).`);
   }
@@ -1083,7 +1125,7 @@ function renderActiveShareSection() {
   card.style.display = "block";
 
   const fundSel = document.getElementById("activeShareFund");
-  const { fund } = syncPositionSelectors(fundSel, null);
+  const { fund } = syncPositionSelectors(fundSel, null, { allowAll: false });
 
   const months = listIndexMonths();
   if (!months.length) {
@@ -1234,7 +1276,10 @@ function renderBreakdownSection() {
 
   // the same in-house fund treatment as the look-through, so the two cards never disagree
   const expandFunds = document.getElementById("lookThroughExpand").value === "expand";
-  const bd = computeBreakdown(fund, month, { by: breakdownBy, expandFunds });
+  const bd = fund === ALL_FUNDS
+    ? computeBreakdownConsolidated(month, { by: breakdownBy, expandFunds })
+    : computeBreakdown(fund, month, { by: breakdownBy, expandFunds });
+  if (!bd) { card.style.display = "none"; return; }
 
   document.getElementById("breakdownKeyCol").textContent = breakdownBy === "ccy" ? "Currency" : "Sector";
   document.getElementById("breakdownSubtitle").textContent =
@@ -1324,7 +1369,7 @@ function renderHoldingsSections() {
   card.style.display = "block";
 
   const fundSel = document.getElementById("holdingsFundSelector");
-  const { fund } = syncPositionSelectors(fundSel, null);
+  const { fund } = syncPositionSelectors(fundSel, null, { allowAll: false });
 
   const months = listHoldingMonthsForFund(fund).slice().sort();   // oldest first
   const selA = document.getElementById("holdingsPeriodA");
