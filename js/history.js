@@ -206,6 +206,24 @@ function isBondLike(h) {
   return /bond|fixed income|treasury|gilt|\bbill\b/i.test(h.category || "");
 }
 
+/** Futures, options and the like are never a holding for these lists. A derivative's market
+ *  value is its unrealised profit rather than its exposure, so a contract opened in the
+ *  period arrives as an entry at 0.0000% and a contract rolled to the next quarter reads as
+ *  one position closed and another opened — neither of which is a stock pick.
+ *
+ *  The exposure is not lost by dropping it here: active share still takes the notional from
+ *  nominal x price and spreads it across the index, and the allocation still counts it as
+ *  equity with the cash offset against it. Only the holdings lists ignore it.
+ *
+ *  Category catches the usual wording, and the contract name carries a dated code
+ *  ("17SEP26 CTOP") for any format that files a derivative somewhere unexpected. */
+const DERIVATIVE_CATEGORY = /derivativ|future|option|swap|forward/i;
+const CONTRACT_NAME = /^\s*\d{1,2}[A-Z]{3}\d{2}\b/i;
+
+function isDerivative(h) {
+  return DERIVATIVE_CATEGORY.test(h.category || "") || CONTRACT_NAME.test(h.name || "");
+}
+
 /** SA or global, by the same rule the allocation uses: the trading currency, falling back to
  *  what the category implies for the formats that carry no currency. Applies to bonds as
  *  much as shares, so "SA only" is the whole South African book. */
@@ -237,6 +255,7 @@ function holdingsByKey(fund, monthKey,
 
   function walk(holdings, scale, visited) {
     holdings.forEach(h => {
+      if (isDerivative(h)) return;
       if (excludeCash && isCashLike(h)) return;
       if (excludeBonds && isBondLike(h)) return;
       // A holding in one of the firm's own funds is not a stock pick; looked through, its
