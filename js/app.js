@@ -1544,6 +1544,7 @@ document.getElementById("tradeSearch").addEventListener("input", e => { tradeFil
 document.getElementById("tradeFrom").addEventListener("change", e => { tradeFilter.from = e.target.value; renderTradesTable(); });
 document.getElementById("tradeTo").addEventListener("change", e => { tradeFilter.to = e.target.value; renderTradesTable(); });
 document.getElementById("tradeSourceFilter").addEventListener("change", e => { tradeFilter.source = e.target.value; renderTradesTable(); });
+document.getElementById("tradeExcludeDerivatives").addEventListener("change", renderTradesTable);
 
 function renderTradeSourceFilterOptions() {
   const sel = document.getElementById("tradeSourceFilter");
@@ -1594,6 +1595,12 @@ function renderTradesTable() {
   if (!state.trades.length) return;
   const cols = getTradeColumns();
   let rows = state.trades.slice();
+
+  // on by default: a futures roll or a margin call is not a trade in a business, and it
+  // crowds the blotter. The count line below says how many rows the filters took out, so
+  // nothing disappears without a number attached.
+  if (document.getElementById("tradeExcludeDerivatives").checked)
+    rows = rows.filter(t => !isDerivativeTrade(t));
 
   if (tradeFilter.type !== "all") rows = rows.filter(t => t.type.toLowerCase() === tradeFilter.type);
   if (tradeFilter.search) rows = rows.filter(t => t.security.toLowerCase().includes(tradeFilter.search));

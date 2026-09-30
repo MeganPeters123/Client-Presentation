@@ -482,6 +482,10 @@
       <input type="date" id="tradeFrom" title="From date">
       <input type="date" id="tradeTo" title="To date">
       <select id="tradeSourceFilter" style="display:none;"></select>
+      <label class="inline-check" for="tradeExcludeDerivatives"
+             title="Futures, options and margin calls. Untick to see them in the blotter.">
+        <input type="checkbox" id="tradeExcludeDerivatives" checked> Exclude derivatives
+      </label>
       <div class="spacer"></div>
       <span class="card-subtitle" id="tradeCount"></span>
     </div>

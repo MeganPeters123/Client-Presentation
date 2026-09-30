@@ -224,6 +224,28 @@ function isDerivative(h) {
   return DERIVATIVE_CATEGORY.test(h.category || "") || CONTRACT_NAME.test(h.name || "");
 }
 
+/** The same judgement for a trade record, which carries no category — only the security
+ *  description and the transaction wording, so both have to be read.
+ *
+ *  Matching a bare word against a security name is the risk here: "Futuregrowth" is a real
+ *  manager whose money-market funds these portfolios hold, and /future/ would take its
+ *  trades out with the contracts. Hence word boundaries, and hence SAFEX is absent — the
+ *  SAFEX ZAR call account is cash, not a derivative.
+ *
+ *  Margin and variation calls are the cash leg of a futures position rather than a trade in
+ *  anything, and the ledger format writes them as a description with no quantity.
+ *
+ *  "Forward" is read in the description but not in a security name: Forward Air and Forward
+ *  Industries are both listed companies, and losing a real equity trade is the worse error
+ *  of the two. An FX forward named as a security stays in the blotter, where it can be seen. */
+const DERIVATIVE_NAME = /\bfutures?\b|\boptions?\b|\bswaps?\b|\b(ALSI|CTOP|DCAP|DTOP)\b/i;
+const DERIVATIVE_DESC = /\bfutures?\b|\boptions?\b|\bswaps?\b|\bforwards?\b|margin|variation call/i;
+
+function isDerivativeTrade(t) {
+  return CONTRACT_NAME.test(t.security || "") || DERIVATIVE_NAME.test(t.security || "")
+      || DERIVATIVE_DESC.test(t.type || "");
+}
+
 /** SA or global, by the same rule the allocation uses: the trading currency, falling back to
  *  what the category implies for the formats that carry no currency. Applies to bonds as
  *  much as shares, so "SA only" is the whole South African book. */
