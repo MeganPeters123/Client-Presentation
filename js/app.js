@@ -1112,7 +1112,7 @@ function renderLookThroughPositions(positions) {
 /* ---------- Active Share ---------- */
 document.getElementById("activeShareFund").addEventListener("change", () =>
   onPositionSelectionChange(document.getElementById("activeShareFund"), null));
-["activeShareIndex", "activeShareOffshore"].forEach(id => {
+["activeShareIndex", "activeShareOffshore", "activeShareNonEquity"].forEach(id => {
   document.getElementById(id).addEventListener("change", renderActiveShareSection);
 });
 
@@ -1144,7 +1144,8 @@ function renderActiveShareSection() {
     : (codes.includes(PRIMARY_INDEX) ? PRIMARY_INDEX : codes[0]);
 
   const includeOffshore = document.getElementById("activeShareOffshore").checked;
-  const series = activeShareSeries(fund, idxSel.value, { includeOffshore });
+  const includeNonEquity = document.getElementById("activeShareNonEquity").checked;
+  const series = activeShareSeries(fund, idxSel.value, { includeOffshore, includeNonEquity });
   if (!series.length) {
     empty.textContent = `No month has both holdings for ${fund} and weights for ${idxSel.value}.`;
     empty.style.display = "block"; body.style.display = "none";
@@ -1153,9 +1154,13 @@ function renderActiveShareSection() {
   empty.style.display = "none"; body.style.display = "block";
 
   const latest = series[series.length - 1];
+  // the basis is the denominator: saying which sleeve the figure is measured on matters
+  // more than which toggles are down, so it is written out rather than listed
+  const basis = includeOffshore
+    ? (includeNonEquity ? "whole portfolio" : "SA and global equity")
+    : (includeNonEquity ? "SA equity, cash and bonds" : "SA equity only");
   document.getElementById("activeShareSubtitle").textContent =
-    `${fund} — ${monthLabelFromKey(latest.month)} vs ${latest.label}` +
-    (includeOffshore ? ", global counted as active" : ", SA sleeve only");
+    `${fund} — ${monthLabelFromKey(latest.month)} vs ${latest.label}, measured on ${basis}`;
 
   const kpi = (label, value, sub) =>
     `<div class="kpi"><div class="label">${label}</div><div class="value">${value}</div>
@@ -1165,6 +1170,8 @@ function renderActiveShareSection() {
     kpi("Active share", `${latest.value.toFixed(1)}%`, monthLabelFromKey(latest.month)) +
     kpi("Global", `${latest.offshorePct.toFixed(1)}%`,
         includeOffshore ? "counted as active" : "excluded from this view") +
+    kpi("Non-equity", `${latest.nonEquityPct.toFixed(1)}%`,
+        includeNonEquity ? "counted as active" : "excluded from this view") +
     kpi("Index futures", futuresApplied.length
         ? futuresApplied.map(f => `${f.contracts > 0 ? "+" : ""}${f.contracts}`).join(", ")
         : "none", futuresApplied.length ? "spread at index weight" : "no open position");

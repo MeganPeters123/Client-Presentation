@@ -266,7 +266,8 @@ function fundEquityExposure(fund, month) {
  *  Returns null when there is nothing to compare. Both sides are that month's cut: the
  *  lookup is keyed on the month, and the monthly index file is the month's data whenever
  *  it happens to arrive. */
-function computeActiveShare(fund, month, { indexCode, includeOffshore = false } = {}) {
+function computeActiveShare(fund, month, { indexCode, includeOffshore = false,
+                                           includeNonEquity = false } = {}) {
   const exp = fundEquityExposure(fund, month);
   const info = indexInfo(month, indexCode);
   if (!exp || !info) return null;
@@ -282,9 +283,19 @@ function computeActiveShare(fund, month, { indexCode, includeOffshore = false } 
 
   const saTotal = [...sa.values()].reduce((s, v) => s + v, 0);
   if (!saTotal) return null;
-  const base = includeOffshore ? saTotal + exp.offshore : saTotal;
+
+  // Everything that is not equity, taken as the residual rather than classified: whatever
+  // the NAV holds beyond SA and global equity is cash, bonds and the like. Taking it as a
+  // residual also nets off the cash a long future is funded from, since the notional has
+  // already been added to the SA leg above.
+  const nonEquity = exp.total - saTotal - exp.offshore;
+
+  const base = saTotal + (includeOffshore ? exp.offshore : 0)
+                       + (includeNonEquity ? nonEquity : 0);
+  if (base <= 0) return null;
   const fw = new Map([...sa].map(([k, v]) => [k, (v / base) * 100]));
   const offshoreWeight = includeOffshore ? (exp.offshore / base) * 100 : 0;
+  const nonEquityWeight = includeNonEquity ? (nonEquity / base) * 100 : 0;
 
   const rows = [];
   new Set([...fw.keys(), ...Object.keys(info.weights)]).forEach(k => {
@@ -293,14 +304,17 @@ function computeActiveShare(fund, month, { indexCode, includeOffshore = false } 
   });
   rows.sort((a, b) => Math.abs(b.active) - Math.abs(a.active));
 
-  // offshore has no benchmark counterpart, so its whole weight is active
-  const value = 0.5 * (rows.reduce((s, r) => s + Math.abs(r.active), 0) + offshoreWeight);
+  // neither global equity nor cash and bonds have a benchmark counterpart, so whatever
+  // weight they carry is active in full
+  const value = 0.5 * (rows.reduce((s, r) => s + Math.abs(r.active), 0)
+                       + Math.abs(offshoreWeight) + Math.abs(nonEquityWeight));
   const mrec = indexWeightsStore.months[month] || {};
 
   return {
     value, rows, futures: applied,
     offshorePct: (exp.offshore / exp.total) * 100,
-    offshoreWeight,
+    nonEquityPct: (nonEquity / exp.total) * 100,
+    offshoreWeight, nonEquityWeight,
     // both sides are that month's cut by construction — the lookup is keyed on the month
     fundAsOf: exp.asOf, indexMonthEnd: mrec.monthEnd || null, indexSourceDate: mrec.sourceDate || null,
     consolidated: exp.consolidated,
