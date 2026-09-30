@@ -246,6 +246,29 @@ function isDerivativeTrade(t) {
       || DERIVATIVE_DESC.test(t.type || "");
 }
 
+/** Whether a row in the blotter is a trade at all.
+ *
+ *  Most of what these reports contain is not. Across the three sources, 6,817 of 19,124
+ *  rows move no position: expense adjustments, accruals, dividends, coupons, interest,
+ *  revaluations and corporate actions. Apex is the extreme — 50 distinct transaction codes,
+ *  of which only a third of rows are buys or sells, and its 2,312 EXADJ+ rows outnumber
+ *  every purchase and sale in the file combined.
+ *
+ *  Matched on the verb rather than a list of codes, because the list is open-ended and each
+ *  system spells it differently: Prescient says BUY, Apex says BUY, RBUY, CBUY, RBBUY and
+ *  BUYIK for in specie, Curo says "Share purchase". A verb test picks up a variant nobody
+ *  has seen yet; an enumeration would quietly drop it. FUT is in the list because opening
+ *  and closing a future is a trade (Apex writes those OPLFUT and CLLFUT) — but MTM is not,
+ *  being a daily revaluation rather than anything transacted.
+ *
+ *  A code carrying no verb is treated as not a trade, so anything genuinely new shows up as
+ *  a fall in the count rather than as a row silently asserted to be a trade. */
+const TRADE_VERB = /BUY|SELL|PURCH|\bSALE\b|FUT/i;
+
+function isTradeRow(t) {
+  return TRADE_VERB.test(t.type || "");
+}
+
 /** SA or global, by the same rule the allocation uses: the trading currency, falling back to
  *  what the category implies for the formats that carry no currency. Applies to bonds as
  *  much as shares, so "SA only" is the whole South African book. */
