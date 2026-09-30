@@ -192,7 +192,10 @@ function holdingKey(h) {
  *  latter. So the name decides. Real bonds are untouched by this: an R2032 is a position and
  *  still shows, unless "Equities only" is on. */
 const CASH_CATEGORY = /cash|money market|\bMMA\b/i;
-const CASH_INSTRUMENT = /\bTB\b|\bNCD\b|treasury bill|negotiable certificate/i;
+// The trade files name the same instruments by internal code — AYTB0014, AYNCD072 — where
+// the holdings files spell them out ("Republic Of South Africa TB 7.576% 28012026"), so the
+// codes need their own alternative: there is no word boundary inside AYTB to match on.
+const CASH_INSTRUMENT = /\bTB\b|\bNCD\b|treasury bill|negotiable certificate|\bAY(TB|NCD)\d/i;
 
 function isCashLike(h) {
   return CASH_CATEGORY.test(h.category || "") || CASH_INSTRUMENT.test(h.name || "");
@@ -266,7 +269,12 @@ function isDerivativeTrade(t) {
 const TRADE_VERB = /BUY|SELL|PURCH|\bSALE\b|FUT/i;
 
 function isTradeRow(t) {
-  return TRADE_VERB.test(t.type || "");
+  // Bills and NCDs are cash management on the way in as much as on the way out. Their
+  // maturities were already out, being no transaction at all, and leaving the purchases in
+  // showed the buy while hiding the roll-off. The instrument decides, not the code: Curo
+  // files an R2032 and an AYNCD under the same "Fixed Interest Purchase", so a code test
+  // would take real bond trades with them.
+  return TRADE_VERB.test(t.type || "") && !CASH_INSTRUMENT.test(t.security || "");
 }
 
 /** SA or global, by the same rule the allocation uses: the trading currency, falling back to
