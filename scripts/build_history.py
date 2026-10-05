@@ -9,6 +9,12 @@ Usage:
     python build_history.py --from 2026-08 --to 2026-08 --dry-run
     python build_history.py --from 2025-07 --to 2026-08 --archive
 
+The written file holds exactly the months in the range and nothing else — it is not
+merged into what is already there. To add one month, give the whole span ending at it,
+not that month alone: "--from 2026-09 --to 2026-09" replaces the history with a single
+month. Only --dry-run is safe to point at one month, and it is the right way to check a
+new month before writing anything.
+
 Config lives in scripts/config.json (gitignored — it holds internal network paths).
 Copy config.example.json to config.json and edit the paths.
 
