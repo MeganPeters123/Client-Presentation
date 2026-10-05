@@ -11,6 +11,13 @@ Usage:
 
 Config lives in scripts/config.json (gitignored — it holds internal network paths).
 Copy config.example.json to config.json and edit the paths.
+
+List every source folder at BOTH depths — "*.XLS" and "*/*.XLS". The export folders
+keep the last few days at the top level and a file-mover sweeps older ones into a year
+subfolder, so a pattern at only one depth silently misses whichever half has not been
+swept yet. In September 2026 that cost six funds their month-end: the run fell back to
+files from the 24th to the 28th and said so, but only because it checks the resolved
+date against the last business day. Run --dry-run first and read that warning.
 """
 
 import argparse
