@@ -59,9 +59,30 @@ const LOOKTHROUGH_BUCKETS = [
   "SA Cash", "Offshore Cash", "SA Fixed Income", "Offshore Fixed Income"
 ];
 const LISTED_BUCKETS = [
-  "SA Equity", "Offshore Equity",
+  "SA Equity", "Offshore Equity", "SA Property", "Offshore Property",
   "SA Cash", "Offshore Cash", "SA Fixed Income", "Offshore Fixed Income"
 ];
+
+/** Listed property, shown on the listed bar as its own slice rather than inside equity.
+ *
+ *  No file we receive marks it: Stor-age arrives as "Equities" from the custodian and
+ *  "JSE-listed Equity" from the flat CSV, so the call is made here from the name. It is the
+ *  only property holding in the archive, which is why a pattern is enough — if the firm ever
+ *  buys a REIT whose name says neither (Redefine, NEPI Rockcastle), add it to PROPERTY_NAMES
+ *  rather than widening the pattern and catching an operating company by accident.
+ *
+ *  This splits the listed bar only. On the look-through bar a REIT still divides by its SA
+ *  revenue share like any other share, because the question that bar answers is where the
+ *  earnings come from, not what the instrument is. */
+const PROPERTY_PATTERN = /\bREITS?\b|propert/i;
+const PROPERTY_NAMES = [];   // exact names or tickers the pattern cannot see
+
+function isProperty(h) {
+  const name = h.name || "", ticker = rawTicker(h.ticker) || "";
+  if (PROPERTY_NAMES.some(p => p.toUpperCase() === name.toUpperCase() ||
+                               p.toUpperCase() === ticker.toUpperCase())) return true;
+  return PROPERTY_PATTERN.test(name);
+}
 /** How the buckets are presented, as distinct from how they are computed.
  *
  *  The engine keeps Quasi-Offshore apart from Offshore Equity, because the difference — the
@@ -83,6 +104,8 @@ const BUCKET_DISPLAY = {
 const LISTED_DISPLAY = {
   "SA Equity": "JSE-listed Equity",
   "Offshore Equity": "Global-listed Equity",
+  "SA Property": "JSE-listed Property",
+  "Offshore Property": "Global-listed Property",
   "Offshore Cash": "Global Cash",
   "Offshore Fixed Income": "Global Fixed Income"
 };
@@ -91,6 +114,7 @@ const LISTED_DISPLAY = {
  *  starts with is the one it splits into on the other bar. */
 const ALLOCATION_ORDER = [
   "JSE-listed Equity", "SA Inc", "Global Equity", "Global-listed Equity",
+  "JSE-listed Property", "Global-listed Property",
   "SA Cash", "Global Cash", "SA Fixed Income", "Global Fixed Income"
 ];
 
@@ -378,6 +402,7 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
   const unresolvedFunds = [];
   const futuresApplied = [];
   const futuresUnsized = [];
+  const propertyHeld = [];
   const fundsWithHoldings = listFundsWithHoldings();
   let equityWeight = 0, mappedWeight = 0;
 
@@ -463,7 +488,13 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
       // home differs — offshore for an offshore line, quasi-offshore for a JSE one
       buckets["SA Inc"] += w * look.pct;
       buckets[listing.listing === "SA" ? "Quasi-Offshore" : "Offshore Equity"] += w * (1 - look.pct);
-      listed[listing.listing === "SA" ? "SA Equity" : "Offshore Equity"] += w;
+
+      // the listed bar names the instrument, so a REIT comes out of equity into its own
+      // slice; the look-through bar above has already split it on revenue like any share
+      const prop = isProperty(h);
+      if (prop) propertyHeld.push({ name: h.name, ticker: h.ticker, weight: w });
+      listed[prop ? (listing.listing === "SA" ? "SA Property" : "Offshore Property")
+                  : (listing.listing === "SA" ? "SA Equity" : "Offshore Equity")] += w;
     });
     return true;
   }
@@ -477,6 +508,7 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
     unresolvedFunds,
     futuresApplied,
     futuresUnsized,
+    propertyHeld,
     coverage: equityWeight ? (mappedWeight / equityWeight) * 100 : 0
   };
 }

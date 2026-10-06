@@ -1026,6 +1026,13 @@ function renderLookThroughSection() {
     parts.push("Held as a single line — no saved holdings for " +
       lt.unresolvedFunds.map(e => `${e.name} (${e.weight.toFixed(1)}%)`).join(", ") + ".");
   }
+  // the one place the two bars deliberately disagree, so it is said rather than found
+  if ((lt.propertyHeld || []).length) {
+    parts.push("Listed property shown separately on the listed bar: " +
+      lt.propertyHeld.map(p => `${p.name} (${p.weight.toFixed(1)}%)`).join(", ") +
+      ". On the look-through bar it still splits on its SA revenue share, so the equity " +
+      "figures either side differ by that much.");
+  }
   (lt.futuresApplied || []).forEach(f => {
     parts.push(`${f.name} ${f.contracts > 0 ? "+" : ""}${f.contracts} contracts — ` +
       `${f.weight > 0 ? "+" : ""}${f.weight.toFixed(1)}% equity at index weight, ` +
@@ -1038,10 +1045,15 @@ function renderLookThroughSection() {
   // the listed bar reflects the fund look-through and any listing calls made below, so say
   // where it has moved away from what the custodian statement itself reported
   const custodian = fund === ALL_FUNDS ? null : computeCustodianAllocation(fund, month);
-  const drift = custodian ? (listed["SA Equity"] || 0) - (custodian["SA Equity"] || 0) : 0;
+  // property is carved out of equity here but not on the statement, which files a REIT under
+  // JSE-listed Equity like any share — so it goes back in before the two are compared, or
+  // every fund holding one reports a drift that is only this split
+  const ourSaListed = (listed["SA Equity"] || 0) + (listed["SA Property"] || 0);
+  const drift = custodian ? ourSaListed - (custodian["SA Equity"] || 0) : 0;
   if (custodian && Math.abs(drift) > 0.005) {
     parts.push(`The custodian reports SA-listed equity at ${custodian["SA Equity"].toFixed(1)}%; ` +
-      `shown here as ${listed["SA Equity"].toFixed(1)}% (${drift > 0 ? "+" : ""}${drift.toFixed(1)}).`);
+      `shown here as ${ourSaListed.toFixed(1)}% (${drift > 0 ? "+" : ""}${drift.toFixed(1)})` +
+      ((listed["SA Property"] || 0) > 0.005 ? ", property included for the comparison." : "."));
   }
   note.textContent = parts.join(" ");
 
