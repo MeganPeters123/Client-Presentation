@@ -38,6 +38,18 @@ function isNonEquityHolding(h) {
   return NON_EQUITY_CATEGORY.test(c) || Object.prototype.hasOwnProperty.call(SEGMENT_TO_BUCKET, c);
 }
 
+/** Cash as against fixed income, for listing what a cash figure is made of. Decided on the
+ *  category alone: a bill filed under Money Market is cash and its value sits in the cash
+ *  segment, while the same bill filed under SA Fixed Income is not and does not. The
+ *  instrument test that portfolio changes uses would disagree with the segment it has to
+ *  add up to. */
+const CASH_ONLY_CATEGORY = /cash|money market|\bMMA\b|deposit|liquidity|call/i;
+
+function isCashCategory(h) {
+  const c = h.category || "";
+  return CASH_ONLY_CATEGORY.test(c) && !/bond|fixed income/i.test(c);
+}
+
 /** A holding's trading currency, falling back to what its category already implies.
  *
  *  The IPD extracts carry no currency column at all, and SA/offshore is decided on currency,
@@ -403,6 +415,7 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
   const futuresApplied = [];
   const futuresUnsized = [];
   const propertyHeld = [];
+  const cashLines = [];
   const fundsWithHoldings = listFundsWithHoldings();
   let equityWeight = 0, mappedWeight = 0;
 
@@ -454,7 +467,17 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
         futuresApplied.push({ name: h.name, code: fut.code, contracts: fut.contracts, weight: wFut });
         return;
       }
-      if (isNonEquityHolding(h)) return;   // counted via segments above
+      if (isNonEquityHolding(h)) {
+        // Cash is taken from the segments, not from these rows, so they are still skipped —
+        // but the rows are what the segment is made of, and that is worth being able to see.
+        // Bills and bonds are left out: they belong to fixed income, wherever filed.
+        if (isCashCategory(h)) {
+          const w = scale * (h.pct || 0);
+          if (w) cashLines.push({ name: h.name, ccy: holdingCcy(h), weight: w,
+                                  side: holdingCcy(h) === "ZAR" ? "SA" : "Global" });
+        }
+        return;   // counted via segments above
+      }
       const w = scale * (h.pct || 0);
       if (!w) return;
 
@@ -509,6 +532,7 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
     futuresApplied,
     futuresUnsized,
     propertyHeld,
+    cashLines,
     coverage: equityWeight ? (mappedWeight / equityWeight) * 100 : 0
   };
 }

@@ -1058,6 +1058,63 @@ function renderLookThroughSection() {
   note.textContent = parts.join(" ");
 
   renderLookThroughPositions(lt.positions);
+  renderCashBreakdown(lt, shownListed);
+}
+
+/** What the cash figures are made of.
+ *
+ *  Cash comes from the snapshot's own segments rather than from the position rows, so unlike
+ *  equity there is no list to put a column on — this is that list. The rows are the cash
+ *  holdings the walk passes over, and they do not always add up to the segment: an export
+ *  may carry a cash total without itemising all of it, and a long future takes cash with it.
+ *  Both are shown as their own lines so the table always reaches the figure on the chart
+ *  rather than quietly falling short of it. */
+function renderCashBreakdown(lt, shownListed) {
+  const wrap = document.getElementById("cashBreakdown");
+  const target = { SA: shownListed["SA Cash"] || 0, Global: shownListed["Global Cash"] || 0 };
+  if (target.SA <= 0.005 && target.Global <= 0.005) { wrap.style.display = "none"; return; }
+  wrap.style.display = "block";
+
+  const rows = (lt.cashLines || []).slice().sort((a, b) => b.weight - a.weight);
+  const cell = (side, row) => (row.side === side ? row.weight.toFixed(2) : "—");
+
+  let html = rows.map(r => `<tr>
+      <td>${r.name}</td>
+      <td class="num">${r.ccy || "—"}</td>
+      <td class="num">${cell("SA", r)}</td>
+      <td class="num">${cell("Global", r)}</td>
+    </tr>`).join("");
+
+  // a long future is equity bought with cash, so the cash it took is named, not absorbed
+  (lt.futuresApplied || []).forEach(f => {
+    html += `<tr>
+      <td style="color:var(--ink-muted);">${f.name} — cash funding the position</td>
+      <td class="num">—</td>
+      <td class="num">${(-f.weight).toFixed(2)}</td>
+      <td class="num">—</td>
+    </tr>`;
+  });
+
+  const listed = { SA: 0, Global: 0 };
+  rows.forEach(r => { listed[r.side] += r.weight; });
+  (lt.futuresApplied || []).forEach(f => { listed.SA -= f.weight; });
+  const gap = { SA: target.SA - listed.SA, Global: target.Global - listed.Global };
+  if (Math.abs(gap.SA) > 0.005 || Math.abs(gap.Global) > 0.005) {
+    html += `<tr>
+      <td style="color:var(--ink-muted);" title="The export reports this much cash without naming what it sits in">Not itemised in the export</td>
+      <td class="num">—</td>
+      <td class="num">${Math.abs(gap.SA) > 0.005 ? gap.SA.toFixed(2) : "—"}</td>
+      <td class="num">${Math.abs(gap.Global) > 0.005 ? gap.Global.toFixed(2) : "—"}</td>
+    </tr>`;
+  }
+  document.querySelector("#cashTable tbody").innerHTML = html;
+  document.querySelector("#cashTable tfoot").innerHTML = `<tr>
+      <th>Total</th><th></th>
+      <th style="text-align:right;">${target.SA.toFixed(2)}</th>
+      <th style="text-align:right;">${target.Global.toFixed(2)}</th>
+    </tr>`;
+  document.getElementById("cashBreakdownTitle").textContent =
+    `${rows.length} cash ${rows.length === 1 ? "line" : "lines"} — adds up to the cash figures above`;
 }
 
 document.getElementById("positionsOnlyUnset").addEventListener("change", renderLookThroughSection);
