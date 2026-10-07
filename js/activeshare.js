@@ -48,13 +48,17 @@ const PRIMARY_INDEX = "J200";
  *
  *  This applies to active share only. In the asset allocation those offshore legs really are
  *  offshore-listed, which is what the SA/offshore split is there to report. */
+/* Keyed on the stem, not the Bloomberg form. The same line reaches us spelled both ways
+ * depending on which system exported it — "N91 LN" from the IPD extracts and a bare "N91"
+ * from the Pres valuations, 74 rows against 138 — so keying on "N91 LN" silently left the
+ * larger half unconsolidated. None of these stems collides with a JSE code. */
 const ISSUER_ALIASES = {
-  "AAL LN": "AGL",     // Anglo American plc — LSE and JSE lines of one company
-  "BHP LN": "BHG",     // BHP Group Ltd
-  "MNDI LN": "MNP",    // Mondi plc
-  "BATS LN": "BTI",    // British American Tobacco plc
-  "BUD UN": "ANH",     // AB InBev — the NYSE ADR over the same shares as the JSE listing
-  "N91 LN": "NY1"      // Ninety One plc / Ninety One Ltd, an equalised dual-listed company
+  "AAL": "AGL",     // Anglo American plc — LSE and JSE lines of one company
+  "BHP": "BHG",     // BHP Group Ltd
+  "MNDI": "MNP",    // Mondi plc
+  "BATS": "BTI",    // British American Tobacco plc
+  "BUD": "ANH",     // AB InBev — the NYSE ADR over the same shares as the JSE listing
+  "N91": "NY1"      // Ninety One plc / Ninety One Ltd, an equalised dual-listed company
 };
 
 /** The code a position should be compared under: its issuer's JSE code where the line is one

@@ -175,8 +175,24 @@ function listHoldingMonthsForFund(fund) {
 }
 
 /** Tickers are more stable than names across periods, so key on ticker where present. */
+/** What counts as one position.
+ *
+ *  Both legs of a dual listing key under the issuer, so holding Ninety One Plc and Ninety
+ *  One Ltd is one holding at their combined weight, and switching from one leg to the other
+ *  is not a portfolio change. Across the archive that is 14 month-to-month steps where the
+ *  issuer was held throughout but the legs moved — each one a false exit, a false entry or
+ *  both. Active share already compared on this basis; the holdings lists now agree with it.
+ *
+ *  resolveIssuer lives in activeshare.js, which loads after this file. */
 function holdingKey(h) {
+  const issuer = typeof resolveIssuer === "function" ? resolveIssuer(h.ticker) : null;
+  if (issuer) return issuer;
   return (h.ticker || h.name || "").trim().toUpperCase();
+}
+
+/** True for the secondary leg of a dual listing — the one that keys under another code. */
+function isSecondaryLeg(h) {
+  return typeof resolveIssuer === "function" && !!resolveIssuer(h.ticker);
 }
 
 /** Cash, call accounts, money-market funds and fee accruals aren't "holdings" for a
@@ -302,7 +318,14 @@ function holdingsByKey(fund, monthKey,
     // a security can appear more than once — different classes, different accounts, or the
     // same share held directly and again inside a fund we looked through — so combine
     const prev = map.get(k);
-    if (prev) { prev.pct += pct; prev.value += value; }
+    if (prev) {
+      prev.pct += pct; prev.value += value;
+      // the issuer's own line names the merged row, rather than whichever leg the file
+      // happened to list first — "Ninety One Ltd", not "Ninety One Plc"
+      if (isSecondaryLeg(prev) && !isSecondaryLeg(h)) {
+        prev.name = h.name; prev.ticker = h.ticker; prev.ccy = h.ccy; prev.category = h.category;
+      }
+    }
     else map.set(k, { ...h, pct, value });
   }
 
