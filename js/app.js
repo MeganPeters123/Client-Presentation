@@ -1075,8 +1075,10 @@ function renderLookThroughPositions(positions) {
     ? `${positions.length} equity positions · ${unset.length} with no revenue split`
     : `${positions.length} equity positions`;
 
+  const foot = document.querySelector("#positionsTable tfoot");
   if (!shown.length) {
-    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--ink-muted);">Nothing to show.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" style="color:var(--ink-muted);">Nothing to show.</td></tr>`;
+    foot.innerHTML = "";
     return;
   }
   const chip = (text, fg, bg) =>
@@ -1094,11 +1096,16 @@ function renderLookThroughPositions(positions) {
       p.origin === null ? chip("new", "var(--bad)", "rgba(208,59,59,0.12)") : "";
     const val = (p.origin === "source" || p.origin === "manual") ? (p.saInc * 100).toFixed(0) : "";
     const sel = o => (p.listing === o ? " selected" : "");
+    // what this line puts into SA Inc. An unresearched holding counts as 0% SA and so adds
+    // nothing, but it reads as a dash rather than 0.00 — the number is unknown, not zero
+    const researched = p.origin === "source" || p.origin === "manual";
+    const contrib = researched ? `${(p.weight * p.saInc).toFixed(2)}` : "—";
     return `<tr>
       <td>${p.name}${flag}</td>
       <td class="num">${p.weight.toFixed(2)}%</td>
       <td class="num"><input type="number" class="sainc-input" data-ticker="${t}"
            min="0" max="100" step="1" placeholder="0" value="${val}"></td>
+      <td class="num">${contrib}</td>
       <td class="num"><select class="listing-input${p.listingOverridden ? " overridden" : ""}" data-ticker="${t}"
            title="${p.listingOverridden ? "Overridden by you" : "From the trading currency (" + escAttr(p.ccy || "?") + ")"}">
         <option value="SA"${sel("SA")}>SA</option>
@@ -1106,6 +1113,17 @@ function renderLookThroughPositions(positions) {
       </select></td>
     </tr>`;
   }).join("");
+
+  // the column adds up to the SA Inc slice on the chart, so it can be read off against it.
+  // Index futures are spread into SA Inc too but are not positions, so the two differ by
+  // that much on a fund holding one — said rather than left to be noticed.
+  const contribTotal = shown.reduce((s, p) => s + p.weight * p.saInc, 0);
+  foot.innerHTML = `<tr>
+      <th>${onlyUnset ? "Total shown" : "Total"}</th>
+      <th></th><th></th>
+      <th style="text-align:right;">${contribTotal.toFixed(2)}</th>
+      <th></th>
+    </tr>`;
 
   const refresh = () => { renderSaIncomeSourceList(); renderLookThroughSection(); };
   tbody.querySelectorAll(".sainc-input").forEach(input => {
