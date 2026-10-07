@@ -35,6 +35,21 @@ ASSET_CLASS_ALIASES = {
 
 CATSUB_BASE_CATEGORY = {"SHS": "Equities", "CALL": "Cash", "DS": "Fixed Income", "FMT": "Fixed Income"}
 
+# Some IPD reports nest one level deeper: a mandate wrapper, then the asset class, then the
+# sector, then the holding. The wrapper is 100% of its own category exactly as a top-level
+# asset class is, so reading the outermost label took "Domestic (South African rand MMA)" to
+# be the asset class and sent a whole equity fund to cash. The wrapper says which side of the
+# book it is and nothing about what the holdings are; the level inside it says that.
+IPD_WRAPPER_LABEL = re.compile(r"\bMMA\b|south african rand\)", re.I)
+IPD_WRAPPER_LOCAL = re.compile(r"domestic|^\s*south african", re.I)
+
+# What counts as the asset class inside a wrapper, as against an ICB sector heading at the
+# same indent. Deliberately exact: "Equity Unit Trusts" is a sector under Equity, not a
+# sibling of it, and the sums in the file say so.
+IPD_INNER_ASSET_CLASS = re.compile(
+    r"^(equit\w*|money market|cash|bonds?|fixed income|propert\w*|derivatives?|"
+    r"preference shares|collective investment schemes)$", re.I)
+
 
 def normalize_asset_class_label(label):
     key = (label or "").strip().lower()
@@ -333,6 +348,7 @@ def parse_ipd_xls(path):
 
     segments, positions = [], []
     current_class = ""
+    wrapper_side = None
     for row in grid[header_idx + 1:]:
         if not row:
             continue
@@ -344,9 +360,22 @@ def parse_ipd_xls(path):
         pct_category = to_number(row[pct_cat_col]) if pct_cat_col < len(row) else None
         value = to_number(row[value_col]) if value_col < len(row) else None
 
+        is_level = not isin and holding_total in ("", None) and pct_category is not None
+
         # a top-level asset class is 100% of its own category, with no ISIN/holding of its own
-        if not isin and holding_total in ("", None) and pct_category is not None and pct_category >= 99.9:
+        if is_level and pct_category >= 99.9:
+            if IPD_WRAPPER_LABEL.search(label):
+                # a mandate wrapper, not an asset class — the class is the level inside it
+                wrapper_side = "local" if IPD_WRAPPER_LOCAL.search(label) else "foreign"
+                current_class = ""
+                continue
+            wrapper_side = None
             current_class = normalize_asset_class_label(label)
+            segments.append({"category": current_class, "value": value or 0.0})
+        elif is_level and wrapper_side and IPD_INNER_ASSET_CLASS.match(label):
+            # inside a wrapper the class carries no side of its own, so the wrapper lends it
+            # one: Foreign + Equity is Global-listed Equity, Domestic + Money Market is SA
+            current_class = normalize_asset_class_label(local_foreign_label(label, wrapper_side))
             segments.append({"category": current_class, "value": value or 0.0})
         elif isin and holding_total not in ("", None):
             positions.append({
