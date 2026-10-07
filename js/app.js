@@ -1069,7 +1069,11 @@ function renderLookThroughPositions(positions) {
   const tbody = document.querySelector("#positionsTable tbody");
   const onlyUnset = document.getElementById("positionsOnlyUnset").checked;
   const unset = positions.filter(p => p.origin !== "source" && p.origin !== "manual");
-  const shown = onlyUnset ? unset : positions;
+  // ordered by what each line puts into SA Inc, so the figure's drivers come first. Weight
+  // breaks the tie, which keeps the unresearched tail — every one of them nil — in size
+  // order rather than in whatever order the file listed them.
+  const shown = (onlyUnset ? unset : positions).slice()
+    .sort((a, b) => (b.weight * b.saInc) - (a.weight * a.saInc) || b.weight - a.weight);
 
   document.getElementById("positionsTitle").textContent = unset.length
     ? `${positions.length} equity positions · ${unset.length} with no revenue split`
