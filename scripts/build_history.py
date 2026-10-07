@@ -304,6 +304,53 @@ def report_below_floor(below_floor, config):
     print("Set min_snapshot_total in config.json to change the floor.")
 
 
+EQUITY_SEGMENT = re.compile(r"equity", re.I)
+
+
+def report_implausible(best):
+    """Catch a fund whose numbers are internally consistent and still wrong.
+
+    Momentum was charted as 100% cash for 25 months: its IPD export nests a mandate wrapper
+    above the asset class, the wrapper was read as the class, and R477m of equities went to
+    cash. Nothing was malformed, nothing failed to parse, every figure summed to 100% — so
+    no existing check had anything to complain about.
+
+    Two shapes are worth naming, both meaning "the category column is not saying what we
+    think it is" rather than "a file is broken":
+
+      no equity at all, on a book of real positions — an equity mandate cannot hold none,
+      and a genuine money-market fund will say so on the line below;
+
+      every holding filed under one label — a constant column, which is what a parser
+      reading the wrong column looks like.
+
+    A concentration threshold would not have found Momentum, whose cash sat 79/21 across two
+    buckets. Absence of equity is the signal; concentration is not."""
+    no_equity, one_label = {}, {}
+    for (fund, period), snap in best.items():
+        total = snap.get("total") or 0
+        holdings = snap.get("holdings") or []
+        if not total or len(holdings) < 5:
+            continue
+        equity = sum(s["value"] for s in snap.get("segments", []) if EQUITY_SEGMENT.search(s["category"]))
+        if equity / total < 0.01:
+            no_equity.setdefault(fund, []).append(period)
+        labels = {h.get("category") or "" for h in holdings}
+        if len(labels) == 1:
+            one_label.setdefault(fund, (next(iter(labels)), []))[1].append(period)
+    if not no_equity and not one_label:
+        return
+    print("\n" + "-" * 78)
+    print("LOOK AT THESE — the figures are consistent, which is not the same as right.")
+    for fund, periods in sorted(no_equity.items()):
+        span = f"{min(periods)}..{max(periods)}" if len(periods) > 1 else periods[0]
+        print(f"   {fund:38} {len(periods):3d} month(s) {span}: holds positions but no equity")
+    for fund, (label, periods) in sorted(one_label.items()):
+        span = f"{min(periods)}..{max(periods)}" if len(periods) > 1 else periods[0]
+        print(f"   {fund:38} {len(periods):3d} month(s) {span}: every holding filed as {label!r}")
+    print("Check the category column in that fund's export before the numbers reach a deck.")
+
+
 def report_categories(best, unmapped):
     """Show what each asset-class label is worth, so mis-bucketed or duplicate categories
     are obvious before the numbers reach a client deck."""
@@ -414,6 +461,7 @@ def main():
     report(best, months)
     report_categories(best, unmapped)
     report_below_floor(below_floor, config)
+    report_implausible(best)
 
     if problems:
         print("\n" + "-" * 78)
