@@ -1062,6 +1062,18 @@ function renderLookThroughSection() {
 
 document.getElementById("positionsOnlyUnset").addEventListener("change", renderLookThroughSection);
 
+/** Which contribution the positions table is read by. Bound once on the static header rather
+ *  than rebound on every render, so a sort survives editing a split in the table below it. */
+let positionSort = { key: "saInc", dir: "desc" };
+document.querySelectorAll("#positionsTable thead th[data-sort]").forEach(th => {
+  th.addEventListener("click", () => {
+    const key = th.dataset.sort;
+    if (positionSort.key === key) positionSort.dir = positionSort.dir === "asc" ? "desc" : "asc";
+    else { positionSort.key = key; positionSort.dir = "desc"; }
+    renderLookThroughSection();
+  });
+});
+
 /** Every equity position, with the two inputs that decide its split. A position the research
  *  workbook has no number for currently counts as 0% SA-derived — an assumption, not a
  *  neutral — so it is flagged and can be set by hand right here. */
@@ -1069,11 +1081,24 @@ function renderLookThroughPositions(positions) {
   const tbody = document.querySelector("#positionsTable tbody");
   const onlyUnset = document.getElementById("positionsOnlyUnset").checked;
   const unset = positions.filter(p => p.origin !== "source" && p.origin !== "manual");
-  // ordered by what each line puts into SA Inc, so the figure's drivers come first. Weight
-  // breaks the tie, which keeps the unresearched tail — every one of them nil — in size
-  // order rather than in whatever order the file listed them.
+  // Ordered by what each line puts into whichever figure is being read, so the drivers of it
+  // come first. Weight breaks the tie, which keeps a tail that is all nil — the unresearched
+  // holdings under SA Inc — in size order rather than the file's.
+  const POSITION_SORTS = {
+    weight: p => p.weight,
+    saInc:  p => p.weight * p.saInc,
+    global: p => p.weight * (1 - p.saInc)
+  };
+  const metric = POSITION_SORTS[positionSort.key] || POSITION_SORTS.saInc;
+  const sign = positionSort.dir === "asc" ? -1 : 1;
   const shown = (onlyUnset ? unset : positions).slice()
-    .sort((a, b) => (b.weight * b.saInc) - (a.weight * a.saInc) || b.weight - a.weight);
+    .sort((a, b) => sign * ((metric(b) - metric(a)) || (b.weight - a.weight)));
+
+  document.querySelectorAll("#positionsTable thead th[data-sort]").forEach(th => {
+    th.style.cursor = "pointer";
+    th.querySelector(".sort-ind").textContent =
+      positionSort.key === th.dataset.sort ? (positionSort.dir === "asc" ? "▲" : "▼") : "";
+  });
 
   document.getElementById("positionsTitle").textContent = unset.length
     ? `${positions.length} equity positions · ${unset.length} with no revenue split`
