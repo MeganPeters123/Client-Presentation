@@ -417,9 +417,21 @@ def write_history(best, out_path):
             "format": snap["format"],
             "savedAt": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         }
+    # build_trades.py merges trade activity into this same file under its own key, and this
+    # used to write {"periods": ...} flat over the top of it — so every holdings rebuild
+    # silently threw the trades away and the only sign was an empty Trade Activity chart.
+    # Whatever this run did not produce is carried over untouched.
+    carried = {}
+    if out_path.exists():
+        try:
+            with open(out_path, "r", encoding="utf-8") as fh:
+                carried = {k: v for k, v in json.load(fh).items() if k != "periods"}
+        except (OSError, ValueError):
+            carried = {}   # unreadable is the same as absent; the rebuild still has to land
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as fh:
-        json.dump({"periods": periods}, fh, indent=2)
+        json.dump({**carried, "periods": periods}, fh, indent=2)
     return len(periods)
 
 
