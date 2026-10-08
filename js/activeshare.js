@@ -199,7 +199,14 @@ function futureIndexCode(h) {
  *  `notional` is null when the saved history predates the contract count being kept, which
  *  is worth telling apart from a fund holding no futures at all. */
 function futuresExposure(h) {
-  if (!/derivative/i.test(h.category || "")) return null;
+  // Category alone does not find these. Of the four contracts open in September, two are
+  // filed under "Derivatives" and the others under "SA Fixed Income" and "JSE-listed
+  // Equity" — so those two were not recognised as futures at all, and their exposure went
+  // missing without the card saying so. The dated contract name is the reliable signal, and
+  // isDerivative already carries both tests for the holdings lists.
+  const looksDerivative = typeof isDerivative === "function"
+    ? isDerivative(h) : /derivative/i.test(h.category || "");
+  if (!looksDerivative) return null;
   const code = futureIndexCode(h);
   if (!code) return null;
   const contracts = h.nominal, price = h.price;

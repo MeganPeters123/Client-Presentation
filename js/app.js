@@ -1038,9 +1038,19 @@ function renderLookThroughSection() {
       `${f.weight > 0 ? "+" : ""}${f.weight.toFixed(1)}% equity at index weight, ` +
       `offset against cash.`);
   });
+  // Two quite different reasons a future goes unsized, and they were saying the same thing.
+  // A missing contract count is a data problem in the holdings file; missing index weights
+  // are a month nobody has imported yet, and telling someone to rebuild the history for that
+  // sends them to the one place that cannot fix it.
   (lt.futuresUnsized || []).forEach(f => {
-    parts.push(`${f.name} carries no contract count in the saved history, so its index ` +
-      `exposure is missing here. Rebuild the history to pick it up.`);
+    if (f.noWeights) {
+      parts.push(`${f.name} tracks ${f.code}, but no index weights are loaded for ` +
+        `${monthLabelFromKey(month)}, so its exposure is missing here. Import that month's ` +
+        `index weights above.`);
+    } else {
+      parts.push(`${f.name} carries no contract count in the saved history, so its index ` +
+        `exposure is missing here. If the export has one, rebuilding the history picks it up.`);
+    }
   });
   // the listed bar reflects the fund look-through and any listing calls made below, so say
   // where it has moved away from what the custodian statement itself reported
