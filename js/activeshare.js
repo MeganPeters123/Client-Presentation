@@ -130,7 +130,13 @@ async function importIndexWeightsFromFile(file) {
     return null;
   };
   if (pick(rows[0], "share") == null || pick(rows[0], "weight") == null) {
-    throw new Error("expected Share and Weight columns");
+    // The pipeline writes two files of the same name. The .xlsx is the side-by-side layout
+    // other workbooks import, one block per index; only the .csv is the flat table with a
+    // row per constituent. Picking the wrong one is the likeliest way to land here, and
+    // "expected Share and Weight columns" did not say which file to reach for instead.
+    throw new Error(/\.xls[xm]?$/i.test(file.name)
+      ? "that looks like the side-by-side workbook — import \"Index Weights - Month End.csv\" instead"
+      : "expected Share and Weight columns");
   }
 
   const months = {};
