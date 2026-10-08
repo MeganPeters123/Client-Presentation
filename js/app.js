@@ -208,6 +208,11 @@ async function handleIndexWeightsUpload(file) {
     const res = await importIndexWeightsFromFile(file);
     renderIndexWeightsSourceList();
     renderActiveShareSection();
+    // The weights decide whether a future can be spread into its index, so the allocation
+    // depends on them as much as active share does. Without this the look-through kept the
+    // figures and the note it had before the upload — a fund reading 84.2% equity and
+    // 13.9% cash, still asking for the weights that were by then loaded.
+    renderLookThroughSection();
     showToast(`Index weights loaded — ${res.months} months, ${res.indices.join(", ")}`);
   } catch (err) {
     console.error(err);
@@ -240,6 +245,7 @@ function renderIndexWeightsSourceList() {
     clearIndexWeights();
     renderIndexWeightsSourceList();
     renderActiveShareSection();
+    renderLookThroughSection();   // the allocation unsizes its futures again
   });
 }
 
