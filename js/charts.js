@@ -243,6 +243,72 @@ const BREAKDOWN_MUTED = { "Not classified": "#c3c2b7", "Cash & Fixed Income": "#
 let breakdownChartInstance = null;
 let breakdownSplitInstance = null;
 
+/** Slice labels for a donut with only a handful of slices.
+ *
+ *  Chart.js draws no labels of its own and the datalabels plugin is a dependency this page
+ *  does not otherwise need, so this is the small amount of it that is actually wanted: the
+ *  name and the percentage on the slice where there is room, and outside on a leader line
+ *  where there is not — which is how the Excel chart this copies handles a thin slice.
+ *
+ *  Measured rather than assumed: a label goes inside only if the text fits within the arc's
+ *  own width at that radius, so a long name on a narrow slice steps out instead of spilling
+ *  over its neighbours. */
+const donutSliceLabels = {
+  id: "donutSliceLabels",
+  afterDatasetsDraw(chart, _args, opts) {
+    const meta = chart.getDatasetMeta(0);
+    if (!meta || !meta.data || !meta.data.length) return;
+    const { ctx } = chart;
+    const data = chart.data.datasets[0].data;
+    const total = data.reduce((s, v) => s + (v || 0), 0);
+    if (!total) return;
+    const ink = opts.color || "#2b2a26";
+
+    ctx.save();
+    ctx.font = opts.font || "600 11px system-ui, sans-serif";
+    ctx.textBaseline = "middle";
+
+    meta.data.forEach((arc, i) => {
+      const value = data[i] || 0;
+      const pct = (value / total) * 100;
+      if (pct < 1.5) return;                       // too thin to point at usefully
+      const label = chart.data.labels[i];
+      const text = `${label} ${pct.toFixed(1)}%`;
+      const mid = (arc.startAngle + arc.endAngle) / 2;
+      const cos = Math.cos(mid), sin = Math.sin(mid);
+      const rIn = arc.innerRadius, rOut = arc.outerRadius;
+      const rMid = rIn + (rOut - rIn) / 2;
+
+      // the chord the slice offers at the label's radius, against what the text needs
+      const width = ctx.measureText(text).width;
+      const arcWidth = Math.abs(arc.endAngle - arc.startAngle) * rMid;
+      if (arcWidth > width + 8 && rOut - rIn > 14) {
+        ctx.fillStyle = ink;
+        ctx.textAlign = "center";
+        ctx.fillText(text, arc.x + cos * rMid, arc.y + sin * rMid);
+        return;
+      }
+
+      // outside, on a leader — but only where the label will actually fit beside the ring,
+      // since a clipped half-word is worse than the tooltip it falls back to
+      const cx = arc.x, cy = arc.y;
+      const right = cos >= 0;
+      const x1 = cx + cos * (rOut + 2), y1 = cy + sin * (rOut + 2);
+      const x2 = cx + cos * (rOut + 10), y2 = cy + sin * (rOut + 10);
+      const x3 = x2 + (right ? 8 : -8);
+      const edge = right ? chart.width - 2 : 2;
+      if (right ? x3 + width + 3 > edge : x3 - width - 3 < edge) return;
+      ctx.strokeStyle = opts.leader || "#b4b1a6";
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineTo(x3, y2); ctx.stroke();
+      ctx.fillStyle = ink;
+      ctx.textAlign = right ? "left" : "right";
+      ctx.fillText(text, x3 + (right ? 3 : -3), y2);
+    });
+    ctx.restore();
+  }
+};
+
 /** The small donut of a pie of a pie: cash against everything else, with the equity slice
  *  deliberately plain because the chart beside it is what breaks that slice open. Hidden
  *  when there is no cash to separate, so the layout does not keep a seat for nothing. */
@@ -256,10 +322,12 @@ function renderBreakdownSplit(lead, equity, enabled) {
   if (!show) return;
 
   const SHADE = { Cash: "#898781", "Fixed Income": "#b4b1a6", "Not itemised in the export": "#dedbd2" };
+  // Short labels on the chart; the table beside it carries the full wording.
+  const SHORT = { "Not itemised in the export": "Not itemised" };
   breakdownSplitInstance = new Chart(document.getElementById("breakdownSplitChart").getContext("2d"), {
     type: "doughnut",
     data: {
-      labels: [...lead.map(r => r.key), "Equity"],
+      labels: [...lead.map(r => SHORT[r.key] || r.key), "Equity"],
       datasets: [{
         data: [...lead.map(r => r.weight), equity],
         backgroundColor: [...lead.map(r => SHADE[r.key] || "#b4b1a6"), "#cfcdc4"],
@@ -267,12 +335,17 @@ function renderBreakdownSplit(lead, equity, enabled) {
       }]
     },
     options: {
-      responsive: true, maintainAspectRatio: false, cutout: "48%",
+      responsive: true, maintainAspectRatio: false, cutout: "45%", radius: "68%",
+      // room for the labels that step outside a thin slice, as a share of the width rather
+      // than a fixed figure — 62px either side of a 154px canvas left a 30px chart
+      layout: { padding: { top: 12, bottom: 12, left: 0, right: 0 } },
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: c => `${c.label}: ${c.parsed.toFixed(1)}%` } }
+        tooltip: { callbacks: { label: c => `${c.label}: ${c.parsed.toFixed(1)}%` } },
+        donutSliceLabels: { color: cssVar("--ink"), leader: cssVar("--border") }
       }
-    }
+    },
+    plugins: [donutSliceLabels]
   });
 }
 

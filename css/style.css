@@ -208,3 +208,8 @@ table.data-table tr:hover td{ background:var(--surface-2); }
 .pie-col .legend-item{ display:flex; align-items:center; gap:6px; font-size:11.5px; padding:1px 0; }
 .pie-col .legend-item .name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .pie-empty{ font-size:11.5px; color:var(--ink-muted); text-align:center; padding:60px 8px; }
+
+/* the pie of a pie gets its own height; .chart-wrap.donut would otherwise outrank a
+   single-class selector and hold it at 240 */
+.chart-wrap.donut.breakdown-donut{ height:300px; }
+@media (max-width:760px){ .chart-wrap.donut.breakdown-donut{ height:230px; } }
