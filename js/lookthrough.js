@@ -473,7 +473,7 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
         // Bills and bonds are left out: they belong to fixed income, wherever filed.
         if (isCashCategory(h)) {
           const w = scale * (h.pct || 0);
-          if (w) cashLines.push({ name: h.name, ccy: holdingCcy(h), weight: w,
+          if (w) cashLines.push({ name: displayName(h), ccy: holdingCcy(h), weight: w,
                                   side: holdingCcy(h) === "ZAR" ? "SA" : "Global" });
         }
         return;   // counted via segments above
@@ -502,7 +502,7 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
       const prev = positions.get(key);
       if (prev) prev.weight += w;
       else positions.set(key, {
-        name: h.name, ticker: h.ticker, ccy: holdingCcy(h), weight: w, isFund: heldAsLine,
+        name: displayName(h), ticker: h.ticker, ccy: holdingCcy(h), weight: w, isFund: heldAsLine,
         saInc: look.pct, origin: look.origin,
         listing: listing.listing, listingOverridden: listing.overridden
       });
@@ -515,7 +515,7 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
       // the listed bar names the instrument, so a REIT comes out of equity into its own
       // slice; the look-through bar above has already split it on revenue like any share
       const prop = isProperty(h);
-      if (prop) propertyHeld.push({ name: h.name, ticker: h.ticker, weight: w });
+      if (prop) propertyHeld.push({ name: displayName(h), ticker: h.ticker, weight: w });
       listed[prop ? (listing.listing === "SA" ? "SA Property" : "Offshore Property")
                   : (listing.listing === "SA" ? "SA Equity" : "Offshore Equity")] += w;
     });
@@ -575,7 +575,7 @@ function computeBreakdown(fund, monthKey, { by = "ccy", expandFunds = true } = {
             const uk = rawTicker(h.ticker) || h.name;
             const prev = unclassified.get(uk);
             if (prev) prev.weight += w;
-            else unclassified.set(uk, { name: h.name, ticker: h.ticker, weight: w });
+            else unclassified.set(uk, { name: displayName(h), ticker: h.ticker, weight: w });
             key = "Not classified";
           }
         }

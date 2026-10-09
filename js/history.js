@@ -190,6 +190,25 @@ function holdingKey(h) {
   return (h.ticker || h.name || "").trim().toUpperCase();
 }
 
+/** What a holding is called on screen, where the export's own name is out of date.
+ *
+ *  The custodian files still say "Reed Elsevier PLC" for a company that has been RELX since
+ *  2015. Renaming here rather than in the source keeps the exports untouched and survives
+ *  every rebuild.
+ *
+ *  Keyed on the ticker, exact spelling first and then the stem. A stem key must be checked
+ *  against the archive before it is added: AMS is Anglo American Platinum on the JSE and
+ *  Amadeus in Madrid, so a stem is only safe where one company answers to it. REL is. */
+const SECURITY_NAMES = {
+  "REL": "RELX PLC"      // renamed from Reed Elsevier in 2015
+};
+
+function displayName(h) {
+  const raw = String(h.ticker == null ? "" : h.ticker).trim().toUpperCase();
+  const stem = typeof normTicker === "function" ? normTicker(raw) : raw;
+  return SECURITY_NAMES[raw] || SECURITY_NAMES[stem] || h.name || "";
+}
+
 /** True for the secondary leg of a dual listing — the one that keys under another code. */
 function isSecondaryLeg(h) {
   return typeof resolveIssuer === "function" && !!resolveIssuer(h.ticker);
@@ -323,10 +342,11 @@ function holdingsByKey(fund, monthKey,
       // the issuer's own line names the merged row, rather than whichever leg the file
       // happened to list first — "Ninety One Ltd", not "Ninety One Plc"
       if (isSecondaryLeg(prev) && !isSecondaryLeg(h)) {
-        prev.name = h.name; prev.ticker = h.ticker; prev.ccy = h.ccy; prev.category = h.category;
+        prev.name = displayName(h); prev.ticker = h.ticker; prev.ccy = h.ccy; prev.category = h.category;
       }
     }
-    else map.set(k, { ...h, pct, value });
+    // the top ten and the changes list both read this map, so the name is settled once here
+    else map.set(k, { ...h, name: displayName(h), pct, value });
   }
 
   function walk(holdings, scale, visited) {
