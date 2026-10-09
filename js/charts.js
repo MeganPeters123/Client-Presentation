@@ -253,6 +253,17 @@ let breakdownSplitInstance = null;
  *  Measured rather than assumed: a label goes inside only if the text fits within the arc's
  *  own width at that radius, so a long name on a narrow slice steps out instead of spilling
  *  over its neighbours. */
+/** Whether white text reads better than black on this fill. Relative luminance, so a mid
+ *  green and a mid amber are judged on what the eye does with them rather than on hue. */
+function onDark(colour) {
+  const m = String(colour || "").trim().match(/^#?([0-9a-f]{6})$/i);
+  if (!m) return false;
+  const n = parseInt(m[1], 16);
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const L = 0.2126 * f((n >> 16) & 255) + 0.7152 * f((n >> 8) & 255) + 0.0722 * f(n & 255);
+  return L < 0.42;
+}
+
 const donutSliceLabels = {
   id: "donutSliceLabels",
   afterDatasetsDraw(chart, _args, opts) {
@@ -260,13 +271,32 @@ const donutSliceLabels = {
     if (!meta || !meta.data || !meta.data.length) return;
     const { ctx } = chart;
     const data = chart.data.datasets[0].data;
-    const total = data.reduce((s, v) => s + (v || 0), 0);
+    // The slices of a secondary pie are a share of the whole, not of themselves: the
+    // currency donut holds only the equity, so left to sum its own data it called GBP 39.1%
+    // of the equity where the table beside it says 35.3% of the fund.
+    const total = opts.total || data.reduce((s, v) => s + (v || 0), 0);
     if (!total) return;
     const ink = opts.color || "#2b2a26";
 
     ctx.save();
     ctx.font = opts.font || "600 11px system-ui, sans-serif";
     ctx.textBaseline = "middle";
+
+    // outside labels are placed in order down each side, so two thin neighbours do not
+    // print on top of each other — MXN and SGD sit next to each other on the currency pie
+    const taken = { left: [], right: [] };
+    const clear = (side, y, away) => {
+      // nudged away from the donut rather than always downwards — a label above the chart
+      // pushed down walks onto the ring it is pointing at, which is what HKD, SGD and MXN
+      // did to the currency pie
+      let out = y;
+      for (let n = 0; n < 40; n++) {
+        if (!taken[side].some(v => Math.abs(v - out) < 13)) break;
+        out += away * 13;
+      }
+      taken[side].push(out);
+      return out;
+    };
 
     meta.data.forEach((arc, i) => {
       const value = data[i] || 0;
@@ -283,7 +313,9 @@ const donutSliceLabels = {
       const width = ctx.measureText(text).width;
       const arcWidth = Math.abs(arc.endAngle - arc.startAngle) * rMid;
       if (arcWidth > width + 8 && rOut - rIn > 14) {
-        ctx.fillStyle = ink;
+        // on a saturated slice the page's ink disappears, so the text takes whichever of
+        // white or near-black actually reads against the colour underneath it
+        ctx.fillStyle = onDark(chart.data.datasets[0].backgroundColor[i]) ? "#ffffff" : "#1f1e1b";
         ctx.textAlign = "center";
         ctx.fillText(text, arc.x + cos * rMid, arc.y + sin * rMid);
         return;
@@ -294,7 +326,8 @@ const donutSliceLabels = {
       const cx = arc.x, cy = arc.y;
       const right = cos >= 0;
       const x1 = cx + cos * (rOut + 2), y1 = cy + sin * (rOut + 2);
-      const x2 = cx + cos * (rOut + 10), y2 = cy + sin * (rOut + 10);
+      const x2 = cx + cos * (rOut + 10), y2raw = cy + sin * (rOut + 10);
+      const y2 = clear(right ? "right" : "left", y2raw, sin < 0 ? -1 : 1);
       const x3 = x2 + (right ? 8 : -8);
       const edge = right ? chart.width - 2 : 2;
       if (right ? x3 + width + 3 > edge : x3 - width - 3 < edge) return;
@@ -350,10 +383,9 @@ function renderBreakdownSplit(lead, equity, enabled) {
 }
 
 /** rows: [{ key, weight }] as percentages, already sorted. */
-function renderBreakdownChart(rows, by) {
+function renderBreakdownChart(rows, by, labelTotal) {
   const ctx = document.getElementById("breakdownChart").getContext("2d");
   if (breakdownChartInstance) breakdownChartInstance.destroy();
-  const ink2 = cssVar("--ink-2");
 
   breakdownChartInstance = new Chart(ctx, {
     type: "doughnut",
@@ -368,12 +400,17 @@ function renderBreakdownChart(rows, by) {
       }]
     },
     options: {
-      responsive: true, maintainAspectRatio: false, cutout: "58%",
+      responsive: true, maintainAspectRatio: false, cutout: "58%", radius: "72%",
+      layout: { padding: { top: 12, bottom: 12 } },
       plugins: {
-        legend: { position: "right", labels: { color: ink2, boxWidth: 11, font: { size: 11 } } },
-        tooltip: { callbacks: { label: c => `${c.label}: ${c.parsed.toFixed(1)}%` } }
+        // the slices carry their own names now, and the table beside the chart lists every
+        // one of them with the same swatch — a legend as well was the third telling
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => `${c.label}: ${c.parsed.toFixed(1)}%` } },
+        donutSliceLabels: { color: cssVar("--ink"), leader: cssVar("--border"), total: labelTotal }
       }
-    }
+    },
+    plugins: [donutSliceLabels]
   });
 }
 

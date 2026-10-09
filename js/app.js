@@ -1468,7 +1468,9 @@ function renderBreakdownSection() {
   document.querySelector("#breakdownTable tfoot").innerHTML =
     `<tr><th>Total</th><th style="text-align:right;">${tableRows.reduce((s, r) => s + r.weight, 0).toFixed(1)}%</th></tr>`;
 
-  renderBreakdownChart(equityRows, breakdownBy);
+  // currency labels are a share of the fund, so they read the same as the table; sector
+  // rows are the whole chart already and size themselves
+  renderBreakdownChart(equityRows, breakdownBy, splitCash ? 100 : null);
   renderBreakdownSplit(lead, equityTotal, splitCash);
 
   // currency is the trading currency of the line, which is not the same thing as where the
