@@ -547,6 +547,8 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
  *  of the fund, plus the positions behind any unclassified weight so they can be set. */
 function computeBreakdown(fund, monthKey, { by = "ccy", expandFunds = true } = {}) {
   const groups = new Map();
+  const cashByKey = new Map();
+  const bondByKey = new Map();
   const unclassified = new Map();
   const fundsWithHoldings = listFundsWithHoldings();
 
@@ -581,6 +583,14 @@ function computeBreakdown(fund, monthKey, { by = "ccy", expandFunds = true } = {
         }
       } else {
         key = holdingCcy(h) || "Unknown";
+        // Tracked alongside, not instead: the currency total is still the whole exposure,
+        // and knowing what within it is not equity lets the chart show a pie of a pie.
+        // Cash and fixed income are kept apart, because calling a bond cash would have had
+        // Balanced reporting 31.5% cash against the 13.3% it actually holds.
+        if (isNonEquityHolding(h)) {
+          const m = isCashCategory(h) ? cashByKey : bondByKey;
+          m.set(key, (m.get(key) || 0) + w);
+        }
       }
       groups.set(key, (groups.get(key) || 0) + w);
     });
@@ -593,6 +603,12 @@ function computeBreakdown(fund, monthKey, { by = "ccy", expandFunds = true } = {
     .sort((a, b) => b.weight - a.weight);
   return {
     rows,
+    // what each currency's exposure is made of, so a caller can show the equity apart from
+    // the cash without walking the holdings a second time
+    cashByKey: Object.fromEntries(cashByKey),
+    bondByKey: Object.fromEntries(bondByKey),
+    cash: [...cashByKey.values()].reduce((s, v) => s + v, 0),
+    bonds: [...bondByKey.values()].reduce((s, v) => s + v, 0),
     unclassified: [...unclassified.values()].sort((a, b) => b.weight - a.weight),
     total: rows.reduce((s, r) => s + r.weight, 0)
   };
@@ -655,6 +671,8 @@ function computeLookThroughConsolidated(monthKey, opts = {}) {
 /** The same idea for the currency and sector cuts. */
 function computeBreakdownConsolidated(monthKey, opts = {}) {
   const groups = new Map();
+  const cashRand = new Map();
+  const bondRand = new Map();
   let total = 0;
   listFundsWithHoldings().forEach(fund => {
     const snap = getFundSnapshotAtOrBefore(fund, monthKey);
@@ -663,12 +681,23 @@ function computeBreakdownConsolidated(monthKey, opts = {}) {
     if (!bd || !bd.rows.length) return;
     total += snap.total;
     bd.rows.forEach(r => groups.set(r.key, (groups.get(r.key) || 0) + r.weight * snap.total / 100));
+    // carried through in rand like everything else here, so a big fund's cash weighs what
+    // it should rather than counting equally with a small one's
+    Object.entries(bd.cashByKey || {}).forEach(([k, w]) =>
+      cashRand.set(k, (cashRand.get(k) || 0) + w * snap.total / 100));
+    Object.entries(bd.bondByKey || {}).forEach(([k, w]) =>
+      bondRand.set(k, (bondRand.get(k) || 0) + w * snap.total / 100));
   });
   if (!total) return null;
+  const pct = m => Object.fromEntries([...m].map(([k, rand]) => [k, (rand / total) * 100]));
+  const cashByKey = pct(cashRand), bondByKey = pct(bondRand);
   return {
     rows: [...groups.entries()]
       .map(([key, rand]) => ({ key, weight: (rand / total) * 100 }))
       .sort((a, b) => b.weight - a.weight),
+    cashByKey, bondByKey,
+    cash: Object.values(cashByKey).reduce((s, v) => s + v, 0),
+    bonds: Object.values(bondByKey).reduce((s, v) => s + v, 0),
     total
   };
 }

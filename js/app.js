@@ -1438,19 +1438,43 @@ function renderBreakdownSection() {
 
   const colorFor = (k, i) => BREAKDOWN_MUTED[k] ||
     (breakdownBy === "ccy" ? CURRENCY_COLORS[k] : null) || LOOKTHROUGH_COLORS[k] || PALETTE[i % PALETTE.length];
-  document.querySelector("#breakdownTable tbody").innerHTML = bd.rows.map((r, i) => `
+  // Currency splits cash out of its own slice, so the two charts and the table all say the
+  // same thing: one share of cash, and the rest broken down by where the equity trades.
+  const splitCash = breakdownBy === "ccy";
+  const cashTotal = splitCash ? (bd.cash || 0) : 0;
+  const bondTotal = splitCash ? (bd.bonds || 0) : 0;
+  const equityRows = splitCash
+    ? bd.rows.map(r => ({ key: r.key,
+          weight: r.weight - ((bd.cashByKey || {})[r.key] || 0) - ((bd.bondByKey || {})[r.key] || 0) }))
+        .filter(r => r.weight > 0.005).sort((a, b) => b.weight - a.weight)
+    : bd.rows;
+  const equityTotal = equityRows.reduce((s, r) => s + r.weight, 0);
+
+  // Three of the funds report a cash total their export never itemises, so the position rows
+  // this card walks fall short of the NAV — Momentum by 5.4 points with no cash line at all.
+  // Naming the shortfall keeps the card at 100% instead of quietly ending at 94.6%.
+  const unitemised = splitCash ? 100 - (cashTotal + bondTotal + equityTotal) : 0;
+  const lead = [];
+  if (splitCash && cashTotal > 0.005) lead.push({ key: "Cash", weight: cashTotal });
+  if (splitCash && bondTotal > 0.005) lead.push({ key: "Fixed Income", weight: bondTotal });
+  if (splitCash && unitemised > 0.05) lead.push({ key: "Not itemised in the export", weight: unitemised });
+  const tableRows = splitCash ? [...lead, ...equityRows] : equityRows;
+
+  document.querySelector("#breakdownTable tbody").innerHTML = tableRows.map((r, i) => `
     <tr>
       <td><span class="legend-swatch" style="display:inline-block;background:${colorFor(r.key, i)};margin-right:7px;"></span>${r.key}</td>
       <td class="num">${r.weight.toFixed(1)}%</td>
     </tr>`).join("");
   document.querySelector("#breakdownTable tfoot").innerHTML =
-    `<tr><th>Total</th><th style="text-align:right;">${bd.total.toFixed(1)}%</th></tr>`;
-  renderBreakdownChart(bd.rows, breakdownBy);
+    `<tr><th>Total</th><th style="text-align:right;">${tableRows.reduce((s, r) => s + r.weight, 0).toFixed(1)}%</th></tr>`;
+
+  renderBreakdownChart(equityRows, breakdownBy);
+  renderBreakdownSplit(lead, equityTotal, splitCash);
 
   // currency is the trading currency of the line, which is not the same thing as where the
   // business earns — say so, rather than letting the chart imply more than it knows
   document.getElementById("breakdownNote").textContent = breakdownBy === "ccy"
-    ? "Currency of the listing each position trades in, cash included. For where the revenue is earned, see the look-through above."
+    ? "Cash first, then the currency each equity position trades in. Cash is shown whole rather than by currency — the look-through card lists it line by line. For where the revenue is earned, see the look-through above."
     : (bd.unclassified.length
       ? `${bd.unclassified.length} position(s) have no sector yet — set them below.`
       : "Every equity position has a sector.");

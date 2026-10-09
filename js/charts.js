@@ -237,9 +237,44 @@ function renderLookThroughChart(bars, order) {
 /* Rand exposure is the number Megan's audience looks for first, so ZAR keeps the SA green
    wherever it appears; everything else takes the standard palette in weight order. */
 const CURRENCY_COLORS = { ZAR: "#008300", USD: "#2a78d6", GBP: "#4a3aa7", EUR: "#eda100", HKD: "#eb6834" };
-const BREAKDOWN_MUTED = { "Not classified": "#c3c2b7", "Cash & Fixed Income": "#898781", Unknown: "#c3c2b7" };
+const BREAKDOWN_MUTED = { "Not classified": "#c3c2b7", "Cash & Fixed Income": "#898781", Unknown: "#c3c2b7",
+                          Cash: "#898781", "Fixed Income": "#b4b1a6", "Not itemised in the export": "#dedbd2" };
 
 let breakdownChartInstance = null;
+let breakdownSplitInstance = null;
+
+/** The small donut of a pie of a pie: cash against everything else, with the equity slice
+ *  deliberately plain because the chart beside it is what breaks that slice open. Hidden
+ *  when there is no cash to separate, so the layout does not keep a seat for nothing. */
+function renderBreakdownSplit(lead, equity, enabled) {
+  const wrap = document.getElementById("breakdownSplitWrap");
+  const link = document.getElementById("breakdownSplitLink");
+  const show = enabled && (lead || []).length > 0 && equity > 0.005;
+  wrap.style.display = show ? "" : "none";
+  link.style.display = show ? "" : "none";
+  if (breakdownSplitInstance) { breakdownSplitInstance.destroy(); breakdownSplitInstance = null; }
+  if (!show) return;
+
+  const SHADE = { Cash: "#898781", "Fixed Income": "#b4b1a6", "Not itemised in the export": "#dedbd2" };
+  breakdownSplitInstance = new Chart(document.getElementById("breakdownSplitChart").getContext("2d"), {
+    type: "doughnut",
+    data: {
+      labels: [...lead.map(r => r.key), "Equity"],
+      datasets: [{
+        data: [...lead.map(r => r.weight), equity],
+        backgroundColor: [...lead.map(r => SHADE[r.key] || "#b4b1a6"), "#cfcdc4"],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: "48%",
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => `${c.label}: ${c.parsed.toFixed(1)}%` } }
+      }
+    }
+  });
+}
 
 /** rows: [{ key, weight }] as percentages, already sorted. */
 function renderBreakdownChart(rows, by) {
