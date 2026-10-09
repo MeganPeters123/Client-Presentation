@@ -204,6 +204,43 @@ let lookThroughChartInstance = null;
 
 /** Two stacked bars — listed vs looked-through — so the reallocation is the story.
  *  bars: [{ label, buckets }]; order: the stacking order across both bars. */
+/** Figures on the segments of a stacked bar.
+ *
+ *  Unlike a pie there is nowhere outside a segment to put a label, so each one takes what
+ *  it has room for: the category and the figure where both fit, the figure alone where only
+ *  that does, and nothing where even that would spill into its neighbour. The legend stays
+ *  for exactly that reason — a 3% segment can carry a number but never a name. */
+const barSegmentLabels = {
+  id: "barSegmentLabels",
+  afterDatasetsDraw(chart, _args, opts) {
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = opts.font || "600 10.5px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    chart.data.datasets.forEach((ds, di) => {
+      const meta = chart.getDatasetMeta(di);
+      if (meta.hidden) return;
+      meta.data.forEach((el, i) => {
+        const value = ds.data[i] || 0;
+        if (value <= 0.05) return;
+        const { x, base, y, height } = el.getProps(["x", "base", "y", "height"], true);
+        const width = Math.abs(x - base);
+        if (height < 14) return;
+        const full = `${ds.label} ${value.toFixed(1)}%`;
+        const figure = `${value.toFixed(1)}%`;
+        const text = ctx.measureText(full).width + 12 <= width ? full
+                   : (ctx.measureText(figure).width + 8 <= width ? figure : null);
+        if (!text) return;
+        ctx.fillStyle = onDark(ds.backgroundColor) ? "#ffffff" : "#1f1e1b";
+        ctx.fillText(text, (x + base) / 2, y);
+      });
+    });
+    ctx.restore();
+  }
+};
+
 function renderLookThroughChart(bars, order) {
   const ctx = document.getElementById("lookThroughChart").getContext("2d");
   if (lookThroughChartInstance) lookThroughChartInstance.destroy();
@@ -224,13 +261,15 @@ function renderLookThroughChart(bars, order) {
       responsive: true, maintainAspectRatio: false,
       plugins: {
         legend: { position: "bottom", labels: { color: ink2, boxWidth: 12, font: { size: 11 } } },
-        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.x.toFixed(1)}%` } }
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.x.toFixed(1)}%` } },
+        barSegmentLabels: {}
       },
       scales: {
         x: { stacked: true, max: 100, ticks: { color: ink2, callback: v => v + "%" }, grid: { color: grid } },
         y: { stacked: true, ticks: { color: ink2, font: { size: 12 } }, grid: { color: "transparent" } }
       }
-    }
+    },
+    plugins: [barSegmentLabels]
   });
 }
 
