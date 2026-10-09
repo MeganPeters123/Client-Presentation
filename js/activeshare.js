@@ -58,14 +58,34 @@ const ISSUER_ALIASES = {
   "MNDI": "MNP",    // Mondi plc
   "BATS": "BTI",    // British American Tobacco plc
   "BUD": "ANH",     // AB InBev — the NYSE ADR over the same shares as the JSE listing
-  "N91": "NY1"      // Ninety One plc / Ninety One Ltd, an equalised dual-listed company
+  "N91": "NY1",     // Ninety One plc / Ninety One Ltd, an equalised dual-listed company
+  // Heineken Holding NV counted as Heineken NV, on Megan's instruction. Unlike the rest of
+  // this map these are not two listings of one share: HEIO is a parent holding about half
+  // of HEIA, and it trades at a standing discount. Treated as one issuer because the house
+  // reads them as one position — the firm held HEIO for 23 months, HEIA for the last 3, and
+  // only once both at the same time, which is a switch rather than two decisions.
+  "HEIO": "HEIA"
 };
 
 /** The code a position should be compared under: its issuer's JSE code where the line is one
  *  leg of a dual listing, otherwise the ticker as given. */
+/** The codes an alias points at. A primary leg has to answer to its own bare code whether it
+ *  arrives suffixed or not, or it never meets the secondary that resolves to it: HEIO NA
+ *  became HEIA while HEIA NA stayed HEIA NA. The JSE pairs hid this, their primaries having
+ *  no suffix to shed.
+ *
+ *  Only these codes are normalised, never every ticker. The suffix is what tells same-stem
+ *  tickers apart — AMS is Amadeus in Madrid and Anglo American Platinum in Johannesburg, AIM
+ *  is Aimia and AI-Media — so stripping it wholesale merges companies that share three
+ *  letters and nothing else. */
+const ISSUER_PRIMARIES = new Set(Object.values(ISSUER_ALIASES));
+
 function resolveIssuer(ticker) {
   const raw = rawTicker(ticker);
-  return ISSUER_ALIASES[raw] || ISSUER_ALIASES[normTicker(raw)] || null;
+  const stem = normTicker(raw);
+  const alias = ISSUER_ALIASES[raw] || ISSUER_ALIASES[stem];
+  if (alias) return alias;
+  return ISSUER_PRIMARIES.has(stem) ? stem : null;
 }
 
 /* Which index each contract tracks. DCAP is the capped-SWIX top 40, which is the index the
