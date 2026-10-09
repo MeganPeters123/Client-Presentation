@@ -200,7 +200,8 @@ function holdingKey(h) {
  *  against the archive before it is added: AMS is Anglo American Platinum on the JSE and
  *  Amadeus in Madrid, so a stem is only safe where one company answers to it. REL is. */
 const SECURITY_NAMES = {
-  "REL": "RELX PLC"      // renamed from Reed Elsevier in 2015
+  "REL": "RELX PLC",     // renamed from Reed Elsevier in 2015
+  "PRX": "Prosus"        // the files disagree — "PROSUS" from one, "Prosus NV" from another
 };
 
 function displayName(h) {
