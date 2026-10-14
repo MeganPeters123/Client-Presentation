@@ -1524,7 +1524,7 @@ function renderSectorAssignment(unclassified) {
 document.getElementById("holdingsFundSelector").addEventListener("change", () =>
   onPositionSelectionChange(document.getElementById("holdingsFundSelector"), null));
 ["holdingsPeriodA", "holdingsPeriodB", "holdingsExcludeBonds", "holdingsLookThrough",
- "holdingsRegion"].forEach(id => {
+ "holdingsRegion", "holdingsNamesOnly"].forEach(id => {
   document.getElementById(id).addEventListener("change", renderHoldingsSections);
 });
 
@@ -1578,11 +1578,25 @@ function renderHoldingsSections() {
   const samePeriod = current === prior;
   // the two tick boxes sit in this card's own header, so the subtitle does not repeat them
   document.getElementById("holdingsSubtitle").textContent =
-    `${fund} — ${monthLabelFromKey(current)}` + (samePeriod ? "" : ` vs ${monthLabelFromKey(prior)}`);
+    `${fund} — ${monthLabelFromKey(current)}` + (samePeriod ? "" : ` vs ${monthLabelFromKey(prior)}`)
+    + (document.getElementById("holdingsNamesOnly").checked ? " · ten largest, listed A–Z" : "");
   document.getElementById("topColB").textContent = monthLabelFromKey(current);
   document.getElementById("topColA").textContent = monthLabelFromKey(prior);
 
-  document.querySelector("#topHoldingsTable tbody").innerHTML = top.map(h => `
+  // Names only: still the ten largest, but listed A to Z with the weights off — a slide
+  // that says what the fund owns without saying how much of each. Sorting by size and then
+  // showing no sizes reads as an arbitrary order, so the order changes with the columns.
+  const namesOnly = document.getElementById("holdingsNamesOnly").checked;
+  const table = document.getElementById("topHoldingsTable");
+  table.querySelectorAll("thead th").forEach((th, i) => { th.style.display = namesOnly && i > 0 ? "none" : ""; });
+
+  const shown = namesOnly
+    ? top.slice().sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" }))
+    : top;
+
+  document.querySelector("#topHoldingsTable tbody").innerHTML = shown.map(h => namesOnly
+    ? `<tr><td>${h.name}</td></tr>`
+    : `
     <tr>
       <td>${h.name}</td>
       <td class="num">${h.current.toFixed(1)}</td>
@@ -1595,7 +1609,8 @@ function renderHoldingsSections() {
   const round1 = v => Math.round(v * 10) / 10;
   const sumCurrent = top.reduce((s, h) => s + round1(h.current), 0);
   const sumPrior = top.reduce((s, h) => s + round1(h.prior), 0);
-  document.querySelector("#topHoldingsTable tfoot").innerHTML = `
+  // a total of nothing is not a total, so it goes with the columns it was adding up
+  document.querySelector("#topHoldingsTable tfoot").innerHTML = namesOnly ? "" : `
     <tr>
       <th>Total</th>
       <th style="text-align:right;">${sumCurrent.toFixed(1)}</th>
