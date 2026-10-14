@@ -345,23 +345,13 @@ const donutSliceLabels = {
       const text = `${label} ${pct.toFixed(1)}%`;
       const mid = (arc.startAngle + arc.endAngle) / 2;
       const cos = Math.cos(mid), sin = Math.sin(mid);
-      const rIn = arc.innerRadius, rOut = arc.outerRadius;
-      const rMid = rIn + (rOut - rIn) / 2;
+      const rOut = arc.outerRadius;
 
-      // the chord the slice offers at the label's radius, against what the text needs
+      // Every label sits outside on a leader, none on the ring. A slice wide enough to hold
+      // its text still only just holds it, and the ones that did looked wedged in — GBP ran
+      // off the edge of its own slice. Outside they all read the same way and the colour
+      // under them stops mattering.
       const width = ctx.measureText(text).width;
-      const arcWidth = Math.abs(arc.endAngle - arc.startAngle) * rMid;
-      if (arcWidth > width + 8 && rOut - rIn > 14) {
-        // on a saturated slice the page's ink disappears, so the text takes whichever of
-        // white or near-black actually reads against the colour underneath it
-        ctx.fillStyle = onDark(chart.data.datasets[0].backgroundColor[i]) ? "#ffffff" : "#1f1e1b";
-        ctx.textAlign = "center";
-        ctx.fillText(text, arc.x + cos * rMid, arc.y + sin * rMid);
-        return;
-      }
-
-      // outside, on a leader — but only where the label will actually fit beside the ring,
-      // since a clipped half-word is worse than the tooltip it falls back to
       const cx = arc.x, cy = arc.y;
       const right = cos >= 0;
       const x1 = cx + cos * (rOut + 2), y1 = cy + sin * (rOut + 2);
@@ -369,7 +359,10 @@ const donutSliceLabels = {
       const y2 = clear(right ? "right" : "left", y2raw, sin < 0 ? -1 : 1);
       const x3 = x2 + (right ? 8 : -8);
       const edge = right ? chart.width - 2 : 2;
+      // nothing is drawn where it would leave the canvas — the nudge that clears a
+      // neighbour can otherwise walk a label straight off the top
       if (right ? x3 + width + 3 > edge : x3 - width - 3 < edge) return;
+      if (y2 < 8 || y2 > chart.height - 8) return;
       ctx.strokeStyle = opts.leader || "#b4b1a6";
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineTo(x3, y2); ctx.stroke();
@@ -407,7 +400,7 @@ function renderBreakdownSplit(lead, equity, enabled) {
       }]
     },
     options: {
-      responsive: true, maintainAspectRatio: false, cutout: "45%", radius: "68%",
+      responsive: true, maintainAspectRatio: false, cutout: "45%", radius: "58%",
       // room for the labels that step outside a thin slice, as a share of the width rather
       // than a fixed figure — 62px either side of a 154px canvas left a 30px chart
       layout: { padding: { top: 12, bottom: 12, left: 0, right: 0 } },
@@ -439,7 +432,7 @@ function renderBreakdownChart(rows, by, labelTotal) {
       }]
     },
     options: {
-      responsive: true, maintainAspectRatio: false, cutout: "58%", radius: "72%",
+      responsive: true, maintainAspectRatio: false, cutout: "58%", radius: "60%",
       layout: { padding: { top: 12, bottom: 12 } },
       plugins: {
         // the slices carry their own names now, and the table beside the chart lists every
