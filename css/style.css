@@ -237,3 +237,9 @@ table.data-table tr:hover td{ background:var(--surface-2); }
    single-class selector and hold it at 240 */
 .chart-wrap.donut.breakdown-donut{ height:300px; }
 @media (max-width:760px){ .chart-wrap.donut.breakdown-donut{ height:230px; } }
+
+/* two cards in one row — flex rather than grid so a hidden card drops out and the other takes the width */
+.card-pair{ display:flex; column-gap:20px; align-items:stretch; }
+.card-pair > .card{ flex:1 1 0; min-width:0; }
+@media (min-width:1001px){ .card-pair .grid2{ grid-template-columns:1fr; } }  /* entries over exits at half width */
+@media (max-width:1000px){ .card-pair{ flex-direction:column; } }
