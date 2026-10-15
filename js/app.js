@@ -1884,9 +1884,20 @@ async function cloudLoadIntoDashboard() {
   hint.textContent = "Loading…";
   try {
     const res = await cloudLoadHistory();
+    // the reference uploads are a separate, optional thing: if that table is missing or
+    // fails, 380 snapshots have still arrived and saying "could not load" would be a lie
+    let extras = { saIncome: false, indexWeights: false };
+    try { extras = await cloudLoadState(); } catch (e) { console.error("app_state:", e.message); }
     renderHistorySummary();
+    renderSaIncomeSourceList();
+    renderIndexWeightsSourceList();
     renderAll();
-    hint.textContent = `Loaded ${res.snapshots} snapshots and ${res.tradeMonths} months of trade activity.`;
+    // naming what did not come down, so an empty look-through is not a mystery
+    const missing = [];
+    if (!extras.saIncome) missing.push("the SA revenue split");
+    if (!extras.indexWeights) missing.push("the index weights");
+    hint.textContent = `Loaded ${res.snapshots} snapshots and ${res.tradeMonths} months of trade activity`
+      + (missing.length ? ` — still to upload here: ${missing.join(" and ")}.` : ", with the revenue split and index weights.");
     showToast(`Loaded ${res.snapshots} snapshots from the saved history`);
   } catch (e) {
     console.error(e);

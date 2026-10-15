@@ -111,6 +111,8 @@ let indexWeightsStore = loadIndexWeights();
 function persistIndexWeights() {
   try {
     localStorage.setItem(INDEX_WEIGHTS_KEY, JSON.stringify(indexWeightsStore));
+        // and centrally, so a second machine signs in rather than re-uploading
+    if (typeof cloudSaveState === "function") cloudSaveState("index_weights", indexWeightsStore);
     return true;
   } catch (e) {
     console.error("Could not save the index weights locally", e);

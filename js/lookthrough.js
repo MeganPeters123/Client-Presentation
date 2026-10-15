@@ -171,6 +171,8 @@ let saIncStore = loadSaIncStore();
 function persistSaIncStore() {
   try {
     localStorage.setItem(SAINC_STORAGE_KEY, JSON.stringify(saIncStore));
+        // and centrally, so a second machine signs in rather than re-uploading
+    if (typeof cloudSaveState === "function") cloudSaveState("sa_income", saIncStore);
     return true;
   } catch (e) {
     console.error("Could not save the SA income map locally", e);

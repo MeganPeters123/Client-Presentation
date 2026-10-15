@@ -102,3 +102,57 @@ async function cloudLoadHistory() {
   persistHistoryStore();
   return { snapshots: snapshots.length, tradeMonths: (trades || []).length };
 }
+
+/* ---------- the two reference uploads, and the calls made on top of them ---------- */
+
+/** Saving is debounced: the revenue-split table writes on every keystroke that lands, and
+ *  each of those would otherwise be a round trip. */
+const cloudSaveTimers = {};
+
+// Hydrating calls the same persist functions that push upwards, so without this a load
+// would immediately save back what it had just read — harmless with one user, and still
+// a round trip for nothing.
+let cloudHydrating = false;
+
+function cloudSaveState(key, value, delay = 1500) {
+  if (!getCloudClient() || cloudHydrating) return;
+  clearTimeout(cloudSaveTimers[key]);
+  cloudSaveTimers[key] = setTimeout(async () => {
+    try {
+      const session = await cloudSession();
+      if (!session) return;                    // signed out: localStorage still has it
+      const { error } = await getCloudClient()
+        .from("app_state")
+        .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" });
+      if (error) console.error(`Could not save ${key} centrally`, error.message);
+    } catch (e) {
+      console.error(`Could not save ${key} centrally`, e);
+    }
+  }, delay);
+}
+
+/** Pull both back down. Returns what it found, so the caller can say so rather than
+ *  leaving someone wondering whether an empty look-through means it failed. */
+async function cloudLoadState() {
+  const c = getCloudClient();
+  if (!c) return { saIncome: false, indexWeights: false };
+  const { data, error } = await c.from("app_state").select("key,value");
+  if (error) throw new Error(error.message);
+
+  const found = { saIncome: false, indexWeights: false };
+  cloudHydrating = true;
+  (data || []).forEach(row => {
+    if (row.key === "sa_income" && row.value && typeof saIncStore !== "undefined") {
+      saIncStore = { ...saIncStore, ...row.value };
+      persistSaIncStore();
+      found.saIncome = true;
+    }
+    if (row.key === "index_weights" && row.value && typeof indexWeightsStore !== "undefined") {
+      indexWeightsStore = { ...indexWeightsStore, ...row.value };
+      persistIndexWeights();
+      found.indexWeights = true;
+    }
+  });
+  cloudHydrating = false;
+  return found;
+}
