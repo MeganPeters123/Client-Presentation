@@ -241,5 +241,15 @@ table.data-table tr:hover td{ background:var(--surface-2); }
 /* two cards in one row — flex rather than grid so a hidden card drops out and the other takes the width */
 .card-pair{ display:flex; column-gap:20px; align-items:stretch; }
 .card-pair > .card{ flex:1 1 0; min-width:0; }
-@media (min-width:1001px){ .card-pair .grid2{ grid-template-columns:1fr; } }  /* entries over exits at half width */
+@media (min-width:1001px){
+  .card-pair .grid2{ grid-template-columns:1fr; }     /* entries over exits, look-through table over positions */
+  /* three donuts across half a row are too small to read, so stack them — legend beside each
+     donut rather than under it, or the card runs to twice the height of its neighbour */
+  .card-pair .pie-row{ grid-template-columns:1fr; gap:18px; }
+  .card-pair .pie-col{ display:grid; grid-template-columns:170px 1fr; column-gap:18px; align-items:center; }
+  .card-pair .pie-col > .pie-title, .card-pair .pie-col > .pie-sub{ grid-column:1 / -1; }
+  .card-pair .pie-col > .pie-empty{ grid-column:1 / -1; padding:24px 8px; }
+  .card-pair .pie-col .chart-wrap.donut{ height:170px; }
+  .card-pair .pie-col .legend{ margin-top:0; }
+}
 @media (max-width:1000px){ .card-pair{ flex-direction:column; } }
