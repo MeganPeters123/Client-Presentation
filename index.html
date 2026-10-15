@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aylett & Co — AUM Dashboard</title>
-<link rel="stylesheet" href="css/style.css?v=1a109bf3">
+<link rel="stylesheet" href="css/style.css?v=57b5f770">
 </head>
 <body>
 
@@ -21,10 +21,19 @@
 
 <div class="main">
 
-  <div class="data-panel" id="dataPanel">
+  <nav class="tab-bar" id="tabBar" role="tablist" aria-label="Dashboard sections">
+    <button class="tab" role="tab" data-target="overview">Overview</button>
+    <button class="tab" role="tab" data-target="allocation">Allocation</button>
+    <button class="tab" role="tab" data-target="holdings">Holdings</button>
+    <button class="tab" role="tab" data-target="trades">Trades</button>
+    <button class="tab" role="tab" data-target="data">Data</button>
+  </nav>
+  <div class="empty-hint tab-empty" id="tabEmpty" style="display:none;"></div>
+
+  <div class="data-panel" id="dataPanel" data-tab="data">
     <div class="data-panel-head" id="dataPanelHead">
       <h2>Data</h2>
-      <span class="hint" id="dataPanelHint">Upload AUM history, asset allocation, trade records and fund holdings to build the dashboard — files are read in your browser only, nothing is uploaded anywhere.</span>
+      <span class="hint" id="dataPanelHint">Sign in to load the saved history, or upload files to build the dashboard. Uploaded files are read in your browser; only the SA revenue split, index weights and your overrides are saved to the shared store when signed in.</span>
       <svg class="chev" viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
     <div class="data-panel-body">
@@ -117,9 +126,9 @@
     </div>
   </div>
 
-  <div id="kpiRow" class="kpi-row" style="display:none;"></div>
+  <div id="kpiRow" data-tab="overview" class="kpi-row" style="display:none;"></div>
 
-  <div id="aumCard" class="card" style="display:none;">
+  <div id="aumCard" data-tab="overview" class="card" style="display:none;">
     <div class="card-head">
       <div>
         <div class="card-title">AUM Trend</div>
@@ -129,7 +138,7 @@
     <div class="chart-wrap"><canvas id="aumChart"></canvas></div>
   </div>
 
-  <div id="fundsCard" class="card" style="display:none;">
+  <div id="fundsCard" data-tab="overview" class="card" style="display:none;">
     <div class="card-head">
       <div>
         <div class="card-title">Funds Under Management</div>
@@ -155,7 +164,7 @@
     </div>
   </div>
 
-  <div id="compareCard" class="card" style="display:none;">
+  <div id="compareCard" data-tab="overview" class="card" style="display:none;">
     <div class="card-head">
       <div>
         <div class="card-title">Compare Periods</div>
@@ -180,7 +189,7 @@
     </div>
   </div>
 
-  <div id="allocationCard" class="card" style="display:none;">
+  <div id="allocationCard" data-tab="allocation" class="card" style="display:none;">
     <div class="card-head">
       <div>
         <div class="card-title">Asset Allocation</div>
@@ -222,7 +231,7 @@
     </div>
   </div>
 
-  <div id="lookThroughCard" class="card" style="display:none;">
+  <div id="lookThroughCard" data-tab="allocation" class="card" style="display:none;">
     <div class="card-head">
       <div>
         <div class="card-title">Asset Allocation — Look-Through</div>
@@ -304,7 +313,140 @@
     </div>
   </div>
 
-  <div id="activeShareCard" class="card" style="display:none;">
+  <div id="breakdownCard" data-tab="allocation" class="card" style="display:none;">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Exposure Breakdown</div>
+        <div class="card-subtitle" id="breakdownSubtitle">The same holdings cut by currency</div>
+      </div>
+      <div class="funds-controls">
+        <div class="seg" id="breakdownBySeg">
+          <button class="active" data-val="ccy">Currency</button>
+          <button data-val="sector">Sector</button>
+        </div>
+        <select id="breakdownFund"></select>
+        <select id="breakdownPeriod"></select>
+      </div>
+    </div>
+    <!-- the charts take the full width: a labelled pie of a pie needs room for the labels,
+         and sharing the row with the table left it 467px to work in -->
+    <div id="breakdownCharts" style="display:flex; align-items:center; gap:4px; min-width:0;">
+      <div class="chart-wrap donut breakdown-donut" id="breakdownSplitWrap" style="flex:1 1 42%; min-width:0;">
+        <canvas id="breakdownSplitChart"></canvas>
+      </div>
+      <div id="breakdownSplitLink" style="flex:0 0 20px; text-align:center; color:var(--ink-muted); font-size:20px; line-height:1;">›</div>
+      <div class="chart-wrap donut breakdown-donut" style="flex:1 1 58%; min-width:0;"><canvas id="breakdownChart"></canvas></div>
+    </div>
+    <div style="margin-top:16px; max-width:460px;">
+      <div class="table-scroll">
+        <table class="data-table" id="breakdownTable">
+          <thead><tr><th id="breakdownKeyCol">Currency</th><th style="text-align:right;">% of Fund</th></tr></thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
+      <div class="card-subtitle" id="breakdownNote" style="margin-top:10px;"></div>
+    </div>
+    <div id="sectorAssignWrap" style="display:none; margin-top:18px; border-top:1px solid var(--border); padding-top:14px;">
+      <div class="card-subtitle" style="margin-bottom:8px;" id="sectorAssignTitle">Positions with no sector</div>
+      <div class="table-scroll" style="max-height:260px;">
+        <table class="data-table" id="sectorAssignTable">
+          <thead><tr><th>Holding</th><th style="text-align:right;">Weight</th><th style="text-align:right;">GICS sector</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="card-subtitle" style="margin-top:8px;">
+        Set these once and they are remembered. Add a <strong>Sector</strong> column to the
+        "SA Income Categories" tab and they fill in from there instead.
+      </div>
+    </div>
+  </div>
+
+  <div id="holdingsCard" data-tab="holdings" class="card" style="display:none;">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Top 10 Holdings</div>
+        <div class="card-subtitle" id="holdingsSubtitle">Largest positions, against a comparison period</div>
+      </div>
+      <div class="funds-controls">
+        <select id="holdingsFundSelector"></select>
+        <select id="holdingsPeriodA" title="Comparison period"></select>
+        <span class="card-subtitle">vs</span>
+        <select id="holdingsPeriodB" title="Current period"></select>
+        <label class="inline-check" title="Leave out bonds and bills, so the list is the equity book">
+          <input type="checkbox" id="holdingsExcludeBonds"> Equities only
+        </label>
+        <label class="inline-check" title="Replace the Global Equity Fund holding with the shares it owns">
+          <input type="checkbox" id="holdingsLookThrough" checked> Look through
+        </label>
+        <select id="holdingsRegion" title="Limit the list to one side of the book — equities and bonds alike">
+          <option value="all" selected>SA and global</option>
+          <option value="sa">SA only</option>
+          <option value="global">Global only</option>
+        </select>
+        <label class="inline-check" title="The same ten holdings, listed A to Z with no weights — for a slide that names what the fund owns without disclosing size">
+          <input type="checkbox" id="holdingsNamesOnly"> Names only
+        </label>
+      </div>
+    </div>
+    <div id="holdingsEmpty" class="empty-hint" style="padding:24px 20px;">Pick a fund and two periods.</div>
+    <div id="holdingsBody" style="display:none;">
+      <div class="table-scroll">
+        <table class="data-table" id="topHoldingsTable">
+          <thead><tr>
+            <th>Holding</th>
+            <th style="text-align:right;" id="topColB">Current</th>
+            <th style="text-align:right;" id="topColA">Prior</th>
+            <th style="text-align:right;">Change</th>
+          </tr></thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="portfolioChangesCard" data-tab="holdings" class="card" style="display:none;">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Portfolio Changes</div>
+        <div class="card-subtitle" id="portfolioChangesSubtitle">Positions opened and closed between the two periods</div>
+      </div>
+      <div class="funds-controls">
+        <label class="inline-check" for="changesThreshold">Show changes of at least</label>
+        <select id="changesThreshold">
+          <option value="0" selected>everything</option>
+          <option value="0.05">0.05%</option>
+          <option value="0.1">0.10%</option>
+          <option value="0.25">0.25%</option>
+          <option value="0.5">0.50%</option>
+          <option value="1">1.00%</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid2">
+      <div>
+        <div class="card-subtitle" style="margin-bottom:8px;">Entries</div>
+        <div class="table-scroll">
+          <table class="data-table" id="entriesTable">
+            <thead><tr><th>Holding</th><th style="text-align:right;">Change (%)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <div class="card-subtitle" style="margin-bottom:8px;">Exits</div>
+        <div class="table-scroll">
+          <table class="data-table" id="exitsTable">
+            <thead><tr><th>Holding</th><th style="text-align:right;">Change (%)</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="activeShareCard" data-tab="holdings" class="card" style="display:none;">
     <div class="card-head">
       <div>
         <div class="card-title">Active Share</div>
@@ -361,140 +503,7 @@
     </div>
   </div>
 
-  <div id="breakdownCard" class="card" style="display:none;">
-    <div class="card-head">
-      <div>
-        <div class="card-title">Exposure Breakdown</div>
-        <div class="card-subtitle" id="breakdownSubtitle">The same holdings cut by currency</div>
-      </div>
-      <div class="funds-controls">
-        <div class="seg" id="breakdownBySeg">
-          <button class="active" data-val="ccy">Currency</button>
-          <button data-val="sector">Sector</button>
-        </div>
-        <select id="breakdownFund"></select>
-        <select id="breakdownPeriod"></select>
-      </div>
-    </div>
-    <!-- the charts take the full width: a labelled pie of a pie needs room for the labels,
-         and sharing the row with the table left it 467px to work in -->
-    <div id="breakdownCharts" style="display:flex; align-items:center; gap:4px; min-width:0;">
-      <div class="chart-wrap donut breakdown-donut" id="breakdownSplitWrap" style="flex:1 1 42%; min-width:0;">
-        <canvas id="breakdownSplitChart"></canvas>
-      </div>
-      <div id="breakdownSplitLink" style="flex:0 0 20px; text-align:center; color:var(--ink-muted); font-size:20px; line-height:1;">›</div>
-      <div class="chart-wrap donut breakdown-donut" style="flex:1 1 58%; min-width:0;"><canvas id="breakdownChart"></canvas></div>
-    </div>
-    <div style="margin-top:16px; max-width:460px;">
-      <div class="table-scroll">
-        <table class="data-table" id="breakdownTable">
-          <thead><tr><th id="breakdownKeyCol">Currency</th><th style="text-align:right;">% of Fund</th></tr></thead>
-          <tbody></tbody>
-          <tfoot></tfoot>
-        </table>
-      </div>
-      <div class="card-subtitle" id="breakdownNote" style="margin-top:10px;"></div>
-    </div>
-    <div id="sectorAssignWrap" style="display:none; margin-top:18px; border-top:1px solid var(--border); padding-top:14px;">
-      <div class="card-subtitle" style="margin-bottom:8px;" id="sectorAssignTitle">Positions with no sector</div>
-      <div class="table-scroll" style="max-height:260px;">
-        <table class="data-table" id="sectorAssignTable">
-          <thead><tr><th>Holding</th><th style="text-align:right;">Weight</th><th style="text-align:right;">GICS sector</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="card-subtitle" style="margin-top:8px;">
-        Set these once and they are remembered. Add a <strong>Sector</strong> column to the
-        "SA Income Categories" tab and they fill in from there instead.
-      </div>
-    </div>
-  </div>
-
-  <div id="holdingsCard" class="card" style="display:none;">
-    <div class="card-head">
-      <div>
-        <div class="card-title">Top 10 Holdings</div>
-        <div class="card-subtitle" id="holdingsSubtitle">Largest positions, against a comparison period</div>
-      </div>
-      <div class="funds-controls">
-        <select id="holdingsFundSelector"></select>
-        <select id="holdingsPeriodA" title="Comparison period"></select>
-        <span class="card-subtitle">vs</span>
-        <select id="holdingsPeriodB" title="Current period"></select>
-        <label class="inline-check" title="Leave out bonds and bills, so the list is the equity book">
-          <input type="checkbox" id="holdingsExcludeBonds"> Equities only
-        </label>
-        <label class="inline-check" title="Replace the Global Equity Fund holding with the shares it owns">
-          <input type="checkbox" id="holdingsLookThrough" checked> Look through
-        </label>
-        <select id="holdingsRegion" title="Limit the list to one side of the book — equities and bonds alike">
-          <option value="all" selected>SA and global</option>
-          <option value="sa">SA only</option>
-          <option value="global">Global only</option>
-        </select>
-        <label class="inline-check" title="The same ten holdings, listed A to Z with no weights — for a slide that names what the fund owns without disclosing size">
-          <input type="checkbox" id="holdingsNamesOnly"> Names only
-        </label>
-      </div>
-    </div>
-    <div id="holdingsEmpty" class="empty-hint" style="padding:24px 20px;">Pick a fund and two periods.</div>
-    <div id="holdingsBody" style="display:none;">
-      <div class="table-scroll">
-        <table class="data-table" id="topHoldingsTable">
-          <thead><tr>
-            <th>Holding</th>
-            <th style="text-align:right;" id="topColB">Current</th>
-            <th style="text-align:right;" id="topColA">Prior</th>
-            <th style="text-align:right;">Change</th>
-          </tr></thead>
-          <tbody></tbody>
-          <tfoot></tfoot>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <div id="portfolioChangesCard" class="card" style="display:none;">
-    <div class="card-head">
-      <div>
-        <div class="card-title">Portfolio Changes</div>
-        <div class="card-subtitle" id="portfolioChangesSubtitle">Positions opened and closed between the two periods</div>
-      </div>
-      <div class="funds-controls">
-        <label class="inline-check" for="changesThreshold">Show changes of at least</label>
-        <select id="changesThreshold">
-          <option value="0" selected>everything</option>
-          <option value="0.05">0.05%</option>
-          <option value="0.1">0.10%</option>
-          <option value="0.25">0.25%</option>
-          <option value="0.5">0.50%</option>
-          <option value="1">1.00%</option>
-        </select>
-      </div>
-    </div>
-    <div class="grid2">
-      <div>
-        <div class="card-subtitle" style="margin-bottom:8px;">Entries</div>
-        <div class="table-scroll">
-          <table class="data-table" id="entriesTable">
-            <thead><tr><th>Holding</th><th style="text-align:right;">Change (%)</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-      <div>
-        <div class="card-subtitle" style="margin-bottom:8px;">Exits</div>
-        <div class="table-scroll">
-          <table class="data-table" id="exitsTable">
-            <thead><tr><th>Holding</th><th style="text-align:right;">Change (%)</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div id="tradeActivityCard" class="card" style="display:none;">
+  <div id="tradeActivityCard" data-tab="trades" class="card" style="display:none;">
     <div class="card-head">
       <div>
         <div class="card-title">Trading Activity</div>
@@ -513,7 +522,7 @@
     </div>
   </div>
 
-  <div id="tradesCard" class="card" style="display:none;">
+  <div id="tradesCard" data-tab="trades" class="card" style="display:none;">
     <div class="card-head">
       <div>
         <div class="card-title">Trade Records</div>
@@ -554,7 +563,7 @@
     <div>Upload at least one file above to build the dashboard.</div>
   </div>
 
-  <div class="footer-note">Everything above runs locally in your browser — no data is uploaded to any server.</div>
+  <div class="footer-note">Uploaded files are read in your browser. The saved history, revenue split, index weights and overrides are stored in Aylett's Supabase project and can only be read once signed in.</div>
 </div>
 
 <!-- Column mapping modal -->
@@ -597,6 +606,7 @@
 <script src="js/cloud.js?v=135f4803"></script>
 <script src="js/activeshare.js?v=8b311ded"></script>
 <script src="js/charts.js?v=2e46e157"></script>
+<script src="js/tabs.js?v=956b76b8"></script>
 <script src="js/app.js?v=7a2ce7c6"></script>
 </body>
 </html>
