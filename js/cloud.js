@@ -95,7 +95,9 @@ async function cloudLoadHistory() {
     historyStore.trades[r.period] = {
       period: r.period,
       byClass: r.by_class || {},
-      bySource: r.by_source || {}
+      bySource: r.by_source || {},
+      // absent until scripts/supabase_trade_securities.sql has been run
+      bySecurity: r.by_security || []
     };
   });
 

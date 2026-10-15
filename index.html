@@ -524,6 +524,49 @@
     </div>
   </div>
 
+  <div id="topTradesCard" data-tab="trades" class="card" style="display:none;">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Top Buys &amp; Sells</div>
+        <div class="card-subtitle" id="topTradesSubtitle">The shares traded most, or least, over the months picked</div>
+      </div>
+      <div class="funds-controls">
+        <select id="topTradesFund"></select>
+        <select id="topTradesFrom" title="From month"></select>
+        <span class="card-subtitle">to</span>
+        <select id="topTradesTo" title="To month"></select>
+        <select id="topTradesClass" title="Asset class"></select>
+        <div class="seg" id="topTradesOrder">
+          <button class="active" data-val="top">Largest</button>
+          <button data-val="bottom">Smallest</button>
+          <button data-val="net" title="Net traded value per share, for shares held at both ends of the period — the commentary pack's up and down weights">Up / down weights</button>
+        </div>
+        <label class="inline-check" for="topTradesDerivatives"
+               title="Index futures and options. Their rolls are large and would fill the list.">
+          <input type="checkbox" id="topTradesDerivatives"> Include derivatives
+        </label>
+      </div>
+    </div>
+    <div id="topTradesEmpty" class="empty-hint" style="padding:24px 20px; display:none;"></div>
+    <div id="topTradesBody">
+      <div class="grid2">
+        <div>
+          <div class="card-subtitle" style="margin-bottom:8px;" id="topBuysLabel">Buys</div>
+          <div class="table-scroll">
+            <table class="data-table" id="topBuysTable"><thead></thead><tbody></tbody></table>
+          </div>
+        </div>
+        <div>
+          <div class="card-subtitle" style="margin-bottom:8px;" id="topSellsLabel">Sells</div>
+          <div class="table-scroll">
+            <table class="data-table" id="topSellsTable"><thead></thead><tbody></tbody></table>
+          </div>
+        </div>
+      </div>
+      <div class="card-subtitle" id="topTradesNote" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
   <div id="tradesCard" data-tab="trades" class="card" style="display:none;">
     <div class="card-head">
       <div>
@@ -605,10 +648,10 @@
 <script src="js/holdings.js?v=bc26bb55"></script>
 <script src="js/history.js?v=f5df62c3"></script>
 <script src="js/lookthrough.js?v=91b1309b"></script>
-<script src="js/cloud.js?v=135f4803"></script>
+<script src="js/cloud.js?v=bf706f5d"></script>
 <script src="js/activeshare.js?v=8b311ded"></script>
 <script src="js/charts.js?v=217fd5ea"></script>
 <script src="js/tabs.js?v=74ed04a5"></script>
-<script src="js/app.js?v=7a2ce7c6"></script>
+<script src="js/app.js?v=c10db67c"></script>
 </body>
 </html>

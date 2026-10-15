@@ -40,5 +40,13 @@
   "_exclude_funds_comment": "Funds to leave out entirely — e.g. mandates that have since closed",
   "exclude_funds": [],
   "output": "C:/path/to/Fund Accounting Tools/Presentation Dashboard/aum-history.json",
-  "archive_dir": "C:/path/to/Fund Accounting Tools/Presentation Dashboard/archive"
+  "archive_dir": "C:/path/to/Fund Accounting Tools/Presentation Dashboard/archive",
+  "trade_fund_names": {
+    "_comment": "Trade report fund code -> the fund name its holdings file carries",
+    "FUNDCODE": "Fund name as in the holdings file"
+  },
+  "trade_fund_currency": {
+    "_comment": "Funds whose base currency is not ZAR; trade values come in base",
+    "FUNDCODE": "USD"
+  }
 }

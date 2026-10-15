@@ -1715,6 +1715,190 @@ function renderTradeActivitySection() {
     }).join("") + "</tr>").join("");
 }
 
+/* ---------- Top Buys & Sells (per-share lines in the saved trade history) ---------- */
+// The ten largest — or smallest — buys and sells over the months picked, per share. The
+// lines come from build_trades.py, one per fund, share and action in a month; this sums
+// them across the months and, for "All rand funds", across funds too.
+const TOP_TRADES_N = 10;
+let topTradesOrder = "top";
+
+["topTradesFund", "topTradesFrom", "topTradesTo", "topTradesClass", "topTradesDerivatives"].forEach(id =>
+  document.getElementById(id).addEventListener("change", renderTopTradesSection));
+document.getElementById("topTradesOrder").addEventListener("click", e => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  document.querySelectorAll("#topTradesOrder button").forEach(b => b.classList.toggle("active", b === btn));
+  topTradesOrder = btn.dataset.val;
+  renderTopTradesSection();
+});
+
+/** Months whose saved trades carry per-share lines. Older builds and a Supabase without the
+ *  by_security column have totals only, and those months can't be offered here. */
+function listTopTradeMonths() {
+  return listTradeMonths().filter(m => ((historyStore.trades[m] || {}).bySecurity || []).length);
+}
+
+/** Refill a select, keeping the current choice if it is still on offer. */
+function fillSelect(sel, options, fallback) {
+  const keep = sel.value;
+  sel.innerHTML = options.map(o => `<option value="${escAttr(o.value)}">${escAttr(o.label)}</option>`).join("");
+  sel.value = options.some(o => o.value === keep) ? keep : fallback;
+}
+
+/** "2026-07" moved by n months: shiftMonthKey("2026-01", -1) is "2025-12". */
+function shiftMonthKey(key, n) {
+  const [y, m] = key.split("-").map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function fmtTradeValue(v, ccy) {
+  return (ccy === "USD" ? "$" : ccy && ccy !== "ZAR" ? ccy + " " : "R ") + fmtCurrency(v);
+}
+
+function renderTopTradesSection() {
+  const card = document.getElementById("topTradesCard");
+  const months = listTopTradeMonths();
+  if (!months.length) { card.style.display = "none"; return; }
+  card.style.display = "block";
+
+  const monthOpts = months.map(m => ({ value: m, label: monthLabelFromKey(m) }));
+  const toSel = document.getElementById("topTradesTo");
+  const fromSel = document.getElementById("topTradesFrom");
+  fillSelect(toSel, monthOpts, months[months.length - 1]);
+  // a quarter by default: the commentary packs run quarter on quarter
+  const toIdx = months.indexOf(toSel.value);
+  fillSelect(fromSel, monthOpts, months[Math.max(0, toIdx - 2)]);
+  let from = fromSel.value, to = toSel.value;
+  if (from > to) [from, to] = [to, from];
+
+  const all = months.flatMap(m => historyStore.trades[m].bySecurity.map(l => ({ ...l, month: m })));
+
+  const funds = [...new Set(all.map(l => l.fund).filter(Boolean))].sort();
+  const fundSel = document.getElementById("topTradesFund");
+  // the dashboard is read one fund at a time, so open on a fund — the one picked elsewhere
+  // if it traded, else the first — with all the rand funds together as the last option
+  fillSelect(fundSel, [...funds.map(f => ({ value: f, label: f })), { value: "all", label: "All rand funds" }],
+             funds.includes(selectedFund) ? selectedFund : funds[0]);
+  const fund = fundSel.value;
+
+  const classes = [...new Set(all.map(l => l.assetClass))].filter(c => c && c !== "Unclassified").sort();
+  const classSel = document.getElementById("topTradesClass");
+  fillSelect(classSel, [...classes.map(c => ({ value: c, label: c })), { value: "all", label: "Every asset class" }],
+             classes.includes("Equity") ? "Equity" : "all");
+  const assetClass = classSel.value;
+  const withDerivatives = document.getElementById("topTradesDerivatives").checked;
+
+  const lines = all.filter(l =>
+    l.month >= from && l.month <= to &&
+    (l.action === "Buy" || l.action === "Sell") &&
+    (assetClass === "all" || l.assetClass === assetClass) &&
+    (withDerivatives || !l.derivative) &&
+    // rand and dollar values can't be ranked against each other, so "all" is the rand book
+    (fund === "all" ? (l.ccy || "ZAR") === "ZAR" : l.fund === fund));
+
+  // one row per share and side: the same share bought in three funds is one buy here
+  const bySide = { Buy: new Map(), Sell: new Map() };
+  lines.forEach(l => {
+    const key = (l.security || "").trim().toLowerCase();
+    const map = bySide[l.action];
+    const row = map.get(key) || { security: (l.security || "").trim(), value: 0, count: 0, funds: new Set(), ccy: l.ccy || "ZAR" };
+    row.value += l.value || 0;
+    row.count += l.count || 0;
+    row.funds.add(l.fund);
+    map.set(key, row);
+  });
+
+  // a single fund's trades read as a share of that fund: its NAV at the end of the period
+  const snap = fund !== "all" ? getFundSnapshotAtOrBefore(fund, to) : null;
+  const nav = snap && snap.total > 0 ? snap.total : null;
+  const navCcy = lines.length ? lines[0].ccy : "ZAR";
+
+  // Up and down weights, as the commentary pack has them: buys less sells per share, for the
+  // shares held at both ends of the period. Entries and exits are left out because Portfolio
+  // Changes already tells that story. Matched against the Q3 2026 Global Fund pack: same ten
+  // up weights and six down weights in the same order, each within 0.03 points.
+  const netMode = topTradesOrder === "net";
+  let sideRows = null, continuingKnown = false;
+  if (netMode && fund !== "all") {
+    const startSnap = getFundSnapshotAtOrBefore(fund, shiftMonthKey(from, -1));
+    const held = sn => new Set((sn && sn.holdings || [])
+      .filter(h => !/cash/i.test(h.category || "")).map(h => (h.name || "").trim().toLowerCase()));
+    const atStart = held(startSnap), atEnd = held(snap);
+    continuingKnown = atStart.size > 0 && atEnd.size > 0;
+    const net = new Map();
+    [...bySide.Buy.entries(), ...bySide.Sell.entries()].forEach(([key, r]) => {
+      const sign = bySide.Buy.get(key) === r ? 1 : -1;
+      const row = net.get(key) || { ...r, value: 0, count: 0 };
+      row.value += sign * r.value;
+      row.count += r.count;
+      net.set(key, row);
+    });
+    const continuing = [...net.entries()]
+      .filter(([key]) => !continuingKnown || (atStart.has(key) && atEnd.has(key))).map(([, r]) => r);
+    sideRows = {
+      Buy: continuing.filter(r => r.value > 0).sort((a, b) => b.value - a.value).slice(0, TOP_TRADES_N),
+      Sell: continuing.filter(r => r.value < 0).sort((a, b) => a.value - b.value).slice(0, TOP_TRADES_N)
+    };
+  }
+  document.getElementById("topBuysLabel").textContent = netMode ? "Up weights" : "Buys";
+  document.getElementById("topSellsLabel").textContent = netMode ? "Down weights" : "Sells";
+
+  const empty = document.getElementById("topTradesEmpty");
+  const body = document.getElementById("topTradesBody");
+  const nothing = netMode
+    ? (fund === "all" ? "Pick a fund to see its up and down weights — they are measured against that fund's own holdings." : null)
+    : (!bySide.Buy.size && !bySide.Sell.size ? "No buys or sells match these choices." : null);
+  if (nothing) {
+    empty.textContent = nothing;
+    empty.style.display = "block"; body.style.display = "none";
+  } else {
+    empty.style.display = "none"; body.style.display = "block";
+  }
+
+  const extraHead = nav
+    ? `<th style="text-align:right;" title="Traded value against the fund's NAV at the end of the period">% of NAV</th>`
+    : fund === "all" ? `<th style="text-align:right;" title="How many funds traded it">Funds</th>` : "";
+  const head = `<tr><th>#</th><th>Share</th><th style="text-align:right;">Value</th>${extraHead}` +
+               `<th style="text-align:right;">Trades</th></tr>`;
+
+  [["Buy", "topBuysTable"], ["Sell", "topSellsTable"]].forEach(([side, id]) => {
+    const rows = sideRows ? sideRows[side] : [...bySide[side].values()]
+      .filter(r => r.value > 0)
+      .sort((a, b) => topTradesOrder === "top" ? b.value - a.value : a.value - b.value)
+      .slice(0, TOP_TRADES_N);
+    const table = document.getElementById(id);
+    table.querySelector("thead").innerHTML = head;
+    table.querySelector("tbody").innerHTML = rows.length ? rows.map((r, i) => `
+      <tr>
+        <td style="color:var(--ink-muted);">${i + 1}</td>
+        <td>${escAttr(r.security)}</td>
+        <td class="num">${r.value < 0 ? "−" : ""}${fmtTradeValue(Math.abs(r.value), r.ccy)}</td>
+        ${nav ? `<td class="num">${(r.value / nav * 100).toFixed(2)}%</td>`
+              : fund === "all" ? `<td class="num">${r.funds.size}</td>` : ""}
+        <td class="num">${r.count}</td>
+      </tr>`).join("")
+      : `<tr><td colspan="5" style="color:var(--ink-muted);">${netMode ? "None" : `No ${side.toLowerCase()}s`}</td></tr>`;
+  });
+
+  const span = from === to ? monthLabelFromKey(from) : `${monthLabelFromKey(from)} – ${monthLabelFromKey(to)}`;
+  document.getElementById("topTradesSubtitle").textContent =
+    `${fund === "all" ? "All rand funds" : fund} · ${span} · ` +
+    (netMode ? "net traded value, continuing holdings" : `${topTradesOrder === "top" ? "largest" : "smallest"} first`);
+
+  const notes = [];
+  if (netMode && fund !== "all") notes.push(continuingKnown
+    ? `Buys less sells for shares held at both ${monthLabelFromKey(shiftMonthKey(from, -1))} and ${monthLabelFromKey(to)}; entries and exits are under Portfolio Changes.`
+    : "Holdings at one end of the period aren't saved, so entries and exits can't be told apart and every share is shown.");
+  if (fund === "all" && all.some(l => l.ccy && l.ccy !== "ZAR"))
+    notes.push("Funds that report in another currency (the Global Fund, in US dollars) are left out of the all-funds view; pick one on its own to see it.");
+  if (nav) notes.push(`% of NAV is against ${fmtTradeValue(nav, navCcy)} at ${monthLabelFromKey(snap.period)}.`);
+  else if (fund !== "all") notes.push("No holdings saved for this fund at the end of the period, so % of NAV can't be shown.");
+  if (!withDerivatives) notes.push("Index futures and options are left out.");
+  notes.push("Corporate actions, maturities and income are not trades and never appear here.");
+  document.getElementById("topTradesNote").textContent = notes.join(" ");
+}
+
 /* ---------- Trades section ---------- */
 document.getElementById("tradeTypeSeg").addEventListener("click", e => {
   const btn = e.target.closest("button");
@@ -1843,6 +2027,7 @@ function renderAll() {
   renderBreakdownSection();
   renderHoldingsSections();
   renderTradeActivitySection();
+  renderTopTradesSection();
   renderTradesSection();
   const anyData = state.aum.length || state.allocation.length || state.trades.length || state.holdingsSnapshots.length ||
     Object.keys(historyStore.periods).length || Object.keys(historyStore.trades || {}).length;

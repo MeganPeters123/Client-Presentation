@@ -36,6 +36,19 @@ DEFAULTS_PATH = Path(__file__).parent / "classification_defaults.json"
 TRADE_FILE_RE = re.compile(
     r"^(?:(\d{4})\.(\d{2})(?:\s*-\s*(\d{4})\.(\d{2}))?\s*-\s*)?Trades Report\s+(.+?)\.xlsx?$", re.I)
 
+# The same judgement js/history.js makes in isDerivativeTrade, so a share's top-trades figure
+# here and the blotter's "Exclude derivatives" agree. Word boundaries matter: Futuregrowth is
+# a manager whose money-market funds these portfolios hold, and /future/ would catch it.
+CONTRACT_NAME = re.compile(r"^\s*\d{1,2}[A-Z]{3}\d{2}\b", re.I)
+DERIVATIVE_NAME = re.compile(r"\bfutures?\b|\boptions?\b|\bswaps?\b|\b(ALSI|CTOP|DCAP|DTOP)\b", re.I)
+DERIVATIVE_CODE = re.compile(r"FUT\b|\bfutures?\b|\boptions?\b|\bswaps?\b|\bforwards?\b|margin|variation call", re.I)
+
+
+def is_derivative(row):
+    sec = row.get("security") or ""
+    return bool(CONTRACT_NAME.search(sec) or DERIVATIVE_NAME.search(sec)
+                or DERIVATIVE_CODE.search(row.get("rawAction") or ""))
+
 
 def load_classification_rules(config):
     """Repo defaults (the decoded transaction codes) with config.json merged on top, so
@@ -95,9 +108,20 @@ def discover_trade_files(folder):
     return found, malformed
 
 
-def summarise(rows, rules):
-    """Fold classified rows into per-(month, source, fund, class, action) value totals."""
+def summarise(rows, rules, fund_names=None, fund_currency=None):
+    """Fold classified rows into per-(month, source, class, action) value totals, and
+    alongside them per-(month, fund, security, class, action) totals for the top trades.
+
+    fund_names maps the code a trade report uses for a fund (PGAGEF, AYLBAL...) onto the
+    name its holdings file carries, so a fund's trades and its NAV can be read together.
+
+    fund_currency names the funds whose base currency is not rand. The reports give values
+    in base, so the Global Fund's are in dollars and must never be ranked against rand as
+    though they were the same unit."""
+    fund_names = {k.lower(): v for k, v in (fund_names or {}).items()}
+    fund_currency = {k.lower(): v for k, v in (fund_currency or {}).items() if not k.startswith("_")}
     summary = defaultdict(lambda: {"value": 0.0, "count": 0})
+    by_security = defaultdict(lambda: {"value": 0.0, "count": 0, "quantity": 0.0})
     unknown_actions = defaultdict(lambda: {"value": 0.0, "count": 0, "sources": set()})
     unknown_classes = defaultdict(lambda: {"value": 0.0, "count": 0, "sources": set()})
     defaulted = defaultdict(lambda: {"value": 0.0, "count": 0, "sources": set(), "asset_class": ""})
@@ -129,7 +153,15 @@ def summarise(rows, rules):
         summary[key]["value"] += value
         summary[key]["count"] += 1
 
-    return summary, unknown_actions, unknown_classes, defaulted
+        code = (row["fund"] or "").lower()
+        fund = fund_names.get(code, row["fund"] or "")
+        skey = (row["month"], row["source"], fund, (row["security"] or "").strip(),
+                asset_class, action, is_derivative(row), fund_currency.get(code, "ZAR"))
+        by_security[skey]["value"] += value
+        by_security[skey]["count"] += 1
+        by_security[skey]["quantity"] += abs(row.get("quantity") or 0.0)
+
+    return summary, by_security, unknown_actions, unknown_classes, defaulted
 
 
 def report(summary, unknown_actions, unknown_classes, defaulted, months):
@@ -179,7 +211,7 @@ def report(summary, unknown_actions, unknown_classes, defaulted, months):
             print(f"   {label:22} R {agg['value']:>16,.2f}  ({agg['count']} rows, {srcs})")
 
 
-def write_into_history(summary, history_path):
+def write_into_history(summary, by_security, history_path):
     """Merge the trade summary into the dashboard's history file under a 'trades' key,
     leaving the holdings 'periods' untouched."""
     data = {"periods": {}}
@@ -196,6 +228,20 @@ def write_into_history(summary, history_path):
         bucket = cls.setdefault(action, {"value": 0.0, "count": 0})
         bucket["value"] = round(bucket["value"] + agg["value"], 2)
         bucket["count"] += agg["count"]
+
+    # every share traded in the month, one line per fund and action, largest first
+    lines = sorted(by_security.items(), key=lambda kv: -kv[1]["value"])
+    for (month, source, fund, security, asset_class, action, derivative, ccy), agg in lines:
+        entry = trades.get(month)
+        if entry is None:
+            continue
+        line = {"fund": fund, "source": source, "security": security,
+                "assetClass": asset_class, "action": action, "ccy": ccy,
+                "value": round(agg["value"], 2), "count": agg["count"],
+                "quantity": round(agg["quantity"], 4)}
+        if derivative:
+            line["derivative"] = True
+        entry.setdefault("bySecurity", []).append(line)
 
     data["trades"] = trades
     data["tradesSavedAt"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -273,14 +319,15 @@ def main():
     if not rows:
         sys.exit(f"\nNo rows in {months[0]}..{months[-1]} — the files cover {all_months[0]}..{all_months[-1]}.")
 
-    summary, unknown_actions, unknown_classes, defaulted = summarise(rows, rules)
+    summary, by_security, unknown_actions, unknown_classes, defaulted = summarise(
+        rows, rules, config.get("trade_fund_names"), config.get("trade_fund_currency"))
     report(summary, unknown_actions, unknown_classes, defaulted, months)
 
     if args.report:
         print("\nReport only — nothing written.")
         return
 
-    count = write_into_history(summary, Path(config["output"]))
+    count = write_into_history(summary, by_security, Path(config["output"]))
     print(f"\nWrote trade activity for {count} month(s) into {config['output']}")
 
     if supabase_push.configured(config):

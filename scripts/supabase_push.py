@@ -88,9 +88,18 @@ def push(config, periods=None, trades=None):
     if trades:
         rows = [{"period": period,
                  "by_class": entry.get("byClass") or {},
-                 "by_source": entry.get("bySource") or {}}
+                 "by_source": entry.get("bySource") or {},
+                 "by_security": entry.get("bySecurity") or []}
                 for period, entry in trades.items()]
         sent, good = _send(url, key, "trade_activity", rows, "period", "trade activity")
+        if not good and sent == 0:
+            # the by_security column arrives with scripts/supabase_trade_securities.sql; until
+            # that has been run, send the monthly totals alone rather than nothing at all
+            print("   retrying without the per-share lines — run scripts/supabase_trade_securities.sql"
+                  " in the Supabase SQL editor to add them")
+            for r in rows:
+                r.pop("by_security")
+            sent, good = _send(url, key, "trade_activity", rows, "period", "trade activity")
         print(f"   trade activity {sent} of {len(rows)}")
         ok = ok and good
 

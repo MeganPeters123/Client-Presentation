@@ -45,6 +45,7 @@ create table if not exists public.trade_activity (
   period     text        primary key,        -- 'YYYY-MM'
   by_class   jsonb       not null default '{}'::jsonb,
   by_source  jsonb       not null default '{}'::jsonb,
+  by_security jsonb      not null default '[]'::jsonb,  -- per fund, share and action
   saved_at   timestamptz not null default now()
 );
 
