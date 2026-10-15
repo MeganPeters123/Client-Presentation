@@ -225,16 +225,16 @@ const barSegmentLabels = {
       meta.data.forEach((el, i) => {
         const value = ds.data[i] || 0;
         if (value <= 0.05) return;
-        const { x, base, y, height } = el.getProps(["x", "base", "y", "height"], true);
-        const width = Math.abs(x - base);
-        if (height < 14) return;
+        // upright bars: the segment runs from base up to y, and its width is the bar's
+        const { x, base, y, width } = el.getProps(["x", "base", "y", "width"], true);
+        if (Math.abs(base - y) < 14) return;
         const full = `${ds.label} ${value.toFixed(1)}%`;
         const figure = `${value.toFixed(1)}%`;
         const text = ctx.measureText(full).width + 12 <= width ? full
                    : (ctx.measureText(figure).width + 8 <= width ? figure : null);
         if (!text) return;
         ctx.fillStyle = onDark(ds.backgroundColor) ? "#ffffff" : "#1f1e1b";
-        ctx.fillText(text, (x + base) / 2, y);
+        ctx.fillText(text, x, (y + base) / 2);
       });
     });
     ctx.restore();
@@ -257,16 +257,17 @@ function renderLookThroughChart(bars, order) {
     type: "bar",
     data: { labels: bars.map(b => b.label), datasets },
     options: {
-      indexAxis: "y",
       responsive: true, maintainAspectRatio: false,
+      // two columns side by side, as on the client slide — wide enough to carry their labels
+      datasets: { bar: { maxBarThickness: 170, categoryPercentage: 0.7, barPercentage: 0.9 } },
       plugins: {
-        legend: { position: "bottom", labels: { color: ink2, boxWidth: 12, font: { size: 11 } } },
-        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.x.toFixed(1)}%` } },
+        legend: { position: "right", labels: { color: ink2, boxWidth: 12, font: { size: 11 } } },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y.toFixed(1)}%` } },
         barSegmentLabels: {}
       },
       scales: {
-        x: { stacked: true, max: 100, ticks: { color: ink2, callback: v => v + "%" }, grid: { color: grid } },
-        y: { stacked: true, ticks: { color: ink2, font: { size: 12 } }, grid: { color: "transparent" } }
+        x: { stacked: true, ticks: { color: ink2, font: { size: 12 } }, grid: { color: "transparent" } },
+        y: { stacked: true, max: 100, ticks: { color: ink2, callback: v => v + "%" }, grid: { color: grid } }
       }
     },
     plugins: [barSegmentLabels]

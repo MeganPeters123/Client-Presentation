@@ -9,7 +9,7 @@
  */
 
 const TAB_STORAGE_KEY = "aum-dashboard-tab";
-const TAB_NAMES = ["overview", "allocation", "holdings", "analysis", "trades", "data"];
+const TAB_NAMES = ["overview", "allocation", "holdings", "exposure", "activeshare", "trades", "data"];
 
 let activeTab = null;
 // Until someone clicks a tab, a first-time visitor starts on Data and is moved to Overview as
@@ -49,6 +49,8 @@ function showTab(name) {
     const on = btn.dataset.target === name;
     btn.classList.toggle("active", on);
     btn.setAttribute("aria-selected", on ? "true" : "false");
+    // on a phone the bar is wider than the screen and scrolls sideways
+    if (on) btn.scrollIntoView({ block: "nearest", inline: "nearest" });
   });
   // the Data tab is the whole page now, so there is nothing to collapse it out of the way of
   if (name === "data") document.getElementById("dataPanel").classList.remove("collapsed");

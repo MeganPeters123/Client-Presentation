@@ -25,7 +25,8 @@
     <button class="tab" role="tab" data-target="overview">Overview</button>
     <button class="tab" role="tab" data-target="allocation">Allocation</button>
     <button class="tab" role="tab" data-target="holdings">Holdings</button>
-    <button class="tab" role="tab" data-target="analysis">Analysis</button>
+    <button class="tab" role="tab" data-target="exposure">Exposure</button>
+    <button class="tab" role="tab" data-target="activeshare">Active Share</button>
     <button class="tab" role="tab" data-target="trades">Trades</button>
     <button class="tab" role="tab" data-target="data">Data</button>
   </nav>
@@ -252,7 +253,7 @@
       Load the SA Revenue Split workbook above to build the look-through.
     </div>
     <div id="lookThroughBody" style="display:none;">
-      <div class="chart-wrap" style="height:180px;"><canvas id="lookThroughChart"></canvas></div>
+      <div class="chart-wrap" style="height:380px;"><canvas id="lookThroughChart"></canvas></div>
       <div class="grid2" style="margin-top:18px;">
         <div>
           <div class="table-scroll">
@@ -398,7 +399,7 @@
     </div>
   </div>
 
-  <div id="breakdownCard" data-tab="analysis" class="card" style="display:none;">
+  <div id="breakdownCard" data-tab="exposure" class="card" style="display:none;">
     <div class="card-head">
       <div>
         <div class="card-title">Exposure Breakdown</div>
@@ -447,7 +448,7 @@
     </div>
   </div>
 
-  <div id="activeShareCard" data-tab="analysis" class="card" style="display:none;">
+  <div id="activeShareCard" data-tab="activeshare" class="card" style="display:none;">
     <div class="card-head">
       <div>
         <div class="card-title">Active Share</div>
@@ -606,8 +607,8 @@
 <script src="js/lookthrough.js?v=91b1309b"></script>
 <script src="js/cloud.js?v=135f4803"></script>
 <script src="js/activeshare.js?v=8b311ded"></script>
-<script src="js/charts.js?v=2e46e157"></script>
-<script src="js/tabs.js?v=3dbdd37d"></script>
+<script src="js/charts.js?v=217fd5ea"></script>
+<script src="js/tabs.js?v=74ed04a5"></script>
 <script src="js/app.js?v=7a2ce7c6"></script>
 </body>
 </html>
