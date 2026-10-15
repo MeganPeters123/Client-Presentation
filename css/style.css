@@ -242,15 +242,11 @@ table.data-table tr:hover td{ background:var(--surface-2); }
 .card-pair{ display:flex; column-gap:20px; align-items:stretch; }
 .card-pair > .card{ flex:1 1 0; min-width:0; }
 @media (min-width:1001px){
-  .card-pair .grid2{ grid-template-columns:1fr; }     /* entries over exits, look-through table over positions */
-  /* three donuts across half a row are too small to read, so stack them — legend beside each
-     donut rather than under it, or the card runs to twice the height of its neighbour */
-  .card-pair .pie-row{ grid-template-columns:1fr; gap:18px; }
-  .card-pair .pie-col{ display:grid; grid-template-columns:170px 1fr; column-gap:18px; align-items:center; }
-  .card-pair .pie-col > .pie-title, .card-pair .pie-col > .pie-sub{ grid-column:1 / -1; }
-  .card-pair .pie-col > .pie-empty{ grid-column:1 / -1; padding:24px 8px; }
-  .card-pair .pie-col .chart-wrap.donut{ height:170px; }
-  .card-pair .pie-col .legend{ margin-top:0; }
+  /* entries over exits, and active share's two tables one above the other. minmax(0, …) not
+     1fr: a 1fr track never shrinks below its content, so a wide table widens the track past
+     the card instead of scrolling inside its own box — which is what pushed Look-Through's
+     positions table out of its card when that was paired */
+  .card-pair .grid2{ grid-template-columns:minmax(0, 1fr); }
   /* the compare card's three figures, kept on one line at half width */
   .card-pair .kpi-row{ grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; }
   .card-pair .kpi{ padding:12px 14px; }
