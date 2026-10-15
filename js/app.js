@@ -1686,11 +1686,9 @@ function tradeSeriesToPlot(showAll) {
 
 function renderTradeActivitySection() {
   const card = document.getElementById("tradeActivityCard");
-  const tableCard = document.getElementById("tradeActivityTableCard");
   const activity = listTradeActivity();
-  if (!activity.length) { card.style.display = "none"; tableCard.style.display = "none"; return; }
+  if (!activity.length) { card.style.display = "none"; return; }
   card.style.display = "block";
-  tableCard.style.display = "block";
 
   const showAll = document.getElementById("tradeShowAllClasses").checked;
   const series = tradeSeriesToPlot(showAll);
