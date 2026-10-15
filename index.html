@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aylett & Co — AUM Dashboard</title>
-<link rel="stylesheet" href="css/style.css?v=951cd4f8">
+<link rel="stylesheet" href="css/style.css?v=d4805318">
 </head>
 <body>
 
@@ -403,9 +403,6 @@
     </div>
   </div>
 
-  <!-- side by side on a wide screen; either card fills the row alone if the other is hidden -->
-  <div class="card-pair">
-
   <div id="breakdownCard" data-tab="analysis" class="card" style="display:none;">
     <div class="card-head">
       <div>
@@ -422,8 +419,7 @@
       </div>
     </div>
     <!-- the charts take the full width: a labelled pie of a pie needs room for the labels,
-         and sharing the row with the table left it 467px to work in. Beside Active Share the
-         card is half width, so there the two donuts stack and each keeps the full width -->
+         and sharing the row with the table left it 467px to work in -->
     <div id="breakdownCharts" style="display:flex; align-items:center; gap:4px; min-width:0;">
       <div class="chart-wrap donut breakdown-donut" id="breakdownSplitWrap" style="flex:1 1 42%; min-width:0;">
         <canvas id="breakdownSplitChart"></canvas>
@@ -511,8 +507,6 @@
         </div>
       </div>
     </div>
-  </div>
-
   </div>
 
   <!-- the chart beside the blotter; the monthly table needs the full width, so it gets its own card below -->

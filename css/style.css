@@ -242,10 +242,10 @@ table.data-table tr:hover td{ background:var(--surface-2); }
 .card-pair{ display:flex; column-gap:20px; align-items:stretch; }
 .card-pair > .card{ flex:1 1 0; min-width:0; }
 @media (min-width:1001px){
-  /* active share's two tables one above the other. minmax(0, …) not
-     1fr: a 1fr track never shrinks below its content, so a wide table widens the track past
-     the card instead of scrolling inside its own box — which is what pushed Look-Through's
-     positions table out of its card when that was paired */
+  /* a two-column grid inside a half-width card stacks. minmax(0, …) not 1fr: a 1fr track
+     never shrinks below its content, so a wide table widens the track past the card instead
+     of scrolling inside its own box — which is what pushed Look-Through's positions table
+     out of its card when that was paired */
   .card-pair .grid2{ grid-template-columns:minmax(0, 1fr); }
   /* the compare card's three figures, kept on one line at half width */
   .card-pair .kpi-row{ grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; }
@@ -261,11 +261,3 @@ table.data-table tr:hover td{ background:var(--surface-2); }
   .card-pair-trades > #tradesCard{ flex-grow:1.5; }
 }
 
-/* at half width the pie of a pie has no room for its labels side by side, so the two donuts
-   stack instead, each keeping the full card width — the inline flex basis is a width and
-   would turn into a height in a column, hence the !important */
-@media (min-width:1001px){
-  .card-pair #breakdownCharts{ flex-direction:column; align-items:stretch !important; }
-  .card-pair #breakdownCharts > .chart-wrap{ flex:0 0 auto !important; width:100%; }
-  .card-pair #breakdownSplitLink{ flex:0 0 auto !important; transform:rotate(90deg); }
-}
