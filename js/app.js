@@ -1745,6 +1745,24 @@ function fillSelect(sel, options, fallback) {
   sel.value = options.some(o => o.value === keep) ? keep : fallback;
 }
 
+/** What each company is called, from the holdings files: the latest name seen under each
+ *  holding key, taken from the primary leg of a dual listing where one is held. Curo's trade
+ *  report names a share only by its code, and the others spell names their own way, so the
+ *  holdings name is the one that reads the same as the Top 10 and Portfolio Changes. */
+function companyNames() {
+  const names = new Map(), fromPrimary = new Set();
+  Object.values(historyStore.periods)
+    .sort((a, b) => (a.period < b.period ? -1 : a.period > b.period ? 1 : 0))
+    .forEach(s => (s.holdings || []).forEach(h => {
+      const key = holdingKey(h), name = displayName(h);
+      if (!name) return;
+      const primary = !isSecondaryLeg(h);
+      if (primary || !fromPrimary.has(key)) names.set(key, name);
+      if (primary) fromPrimary.add(key);
+    }));
+  return names;
+}
+
 /** "2026-07" moved by n months: shiftMonthKey("2026-01", -1) is "2025-12". */
 function shiftMonthKey(key, n) {
   const [y, m] = key.split("-").map(Number);
@@ -1797,12 +1815,16 @@ function renderTopTradesSection() {
     // rand and dollar values can't be ranked against each other, so "all" is the rand book
     (fund === "all" ? (l.ccy || "ZAR") === "ZAR" : l.fund === fund));
 
-  // one row per share and side: the same share bought in three funds is one buy here
+  // One row per company and side. Trades key exactly as holdings do — by ticker, with both
+  // legs of a dual listing under the issuer — so the London and Johannesburg lines of BHP
+  // are one company here, and a trade meets the position it changed. Lines built before the
+  // ticker was carried fall back to the name.
+  const names = companyNames();
   const bySide = { Buy: new Map(), Sell: new Map() };
   lines.forEach(l => {
-    const key = (l.security || "").trim().toLowerCase();
+    const key = holdingKey({ ticker: l.ticker, name: l.security });
     const map = bySide[l.action];
-    const row = map.get(key) || { security: (l.security || "").trim(), value: 0, count: 0, funds: new Set(), ccy: l.ccy || "ZAR" };
+    const row = map.get(key) || { security: names.get(key) || (l.security || "").trim(), value: 0, count: 0, funds: new Set(), ccy: l.ccy || "ZAR" };
     row.value += l.value || 0;
     row.count += l.count || 0;
     row.funds.add(l.fund);
@@ -1823,7 +1845,7 @@ function renderTopTradesSection() {
   if (netMode && fund !== "all") {
     const startSnap = getFundSnapshotAtOrBefore(fund, shiftMonthKey(from, -1));
     const held = sn => new Set((sn && sn.holdings || [])
-      .filter(h => !/cash/i.test(h.category || "")).map(h => (h.name || "").trim().toLowerCase()));
+      .filter(h => !/cash/i.test(h.category || "")).map(holdingKey));
     const atStart = held(startSnap), atEnd = held(snap);
     continuingKnown = atStart.size > 0 && atEnd.size > 0;
     const net = new Map();

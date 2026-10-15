@@ -156,7 +156,8 @@ def summarise(rows, rules, fund_names=None, fund_currency=None):
         code = (row["fund"] or "").lower()
         fund = fund_names.get(code, row["fund"] or "")
         skey = (row["month"], row["source"], fund, (row["security"] or "").strip(),
-                asset_class, action, is_derivative(row), fund_currency.get(code, "ZAR"))
+                (row.get("ticker") or "").strip(), asset_class, action, is_derivative(row),
+                fund_currency.get(code, "ZAR"))
         by_security[skey]["value"] += value
         by_security[skey]["count"] += 1
         by_security[skey]["quantity"] += abs(row.get("quantity") or 0.0)
@@ -231,11 +232,11 @@ def write_into_history(summary, by_security, history_path):
 
     # every share traded in the month, one line per fund and action, largest first
     lines = sorted(by_security.items(), key=lambda kv: -kv[1]["value"])
-    for (month, source, fund, security, asset_class, action, derivative, ccy), agg in lines:
+    for (month, source, fund, security, ticker, asset_class, action, derivative, ccy), agg in lines:
         entry = trades.get(month)
         if entry is None:
             continue
-        line = {"fund": fund, "source": source, "security": security,
+        line = {"fund": fund, "source": source, "security": security, "ticker": ticker,
                 "assetClass": asset_class, "action": action, "ccy": ccy,
                 "value": round(agg["value"], 2), "count": agg["count"],
                 "quantity": round(agg["quantity"], 4)}

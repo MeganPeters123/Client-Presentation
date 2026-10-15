@@ -2,7 +2,11 @@
 
 Every parser returns rows of:
     {"source", "fund", "date", "security", "rawAction", "rawType",
-     "quantity", "value"}
+     "quantity", "value", "ticker"}
+
+ticker is the share code in the style the holdings files use (BHG, N91 LN, 700 HK), so a
+trade can be matched to the position it changed. It is kept apart from Apex's securityCode,
+which the classification rules already look up, so adding it changes no classification.
 
 Classification (asset class + action) is deliberately config-driven rather than inferred:
 these are the firm's own system codes, and a wrong guess would silently misstate trading
@@ -98,6 +102,7 @@ def parse_apex(path, source_label):
             "date": d,
             "security": str(_get(r, c["sec"]) or "").strip(),
             "securityCode": str(_get(r, c["code"]) or "").strip(),
+            "ticker": str(_get(r, c["code"]) or "").strip(),   # the JSE code, e.g. BHG
             "rawAction": str(_get(r, c["action"]) or "").strip(),
             "rawType": "",                       # Apex carries no instrument-type column
             "quantity": to_number(_get(r, c["qty"])),
@@ -117,6 +122,7 @@ def parse_prescient(path, source_label):
         "subtype": _col(header, "Sub Security Type"),
         "qty": _col(header, "Quantity"),
         "value": _col(header, "All in Consideration (Base)", "Clean Consideration (Base)"),
+        "ticker": _col(header, "Ticker"),
     }
     if c["action"] is None or c["date"] is None:
         return []
@@ -137,6 +143,7 @@ def parse_prescient(path, source_label):
             "rawType": sub or inv,
             "quantity": to_number(_get(r, c["qty"])),
             "value": to_number(_get(r, c["value"])),
+            "ticker": str(_get(r, c["ticker"]) or "").strip(),
         })
     return out
 
@@ -164,6 +171,8 @@ def parse_curo(path, source_label):
             "fund": str(_get(r, c["fund"]) or "").strip(),
             "date": d,
             "security": str(_get(r, c["sec"]) or "").strip(),
+            # Curo names a holding only by its code, so the code is the ticker as well
+            "ticker": str(_get(r, c["sec"]) or "").strip(),
             "rawAction": action,
             "rawType": action,     # for Curo the description carries the instrument type too
             "quantity": to_number(_get(r, c["qty"])),
