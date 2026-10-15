@@ -251,5 +251,9 @@ table.data-table tr:hover td{ background:var(--surface-2); }
   .card-pair .pie-col > .pie-empty{ grid-column:1 / -1; padding:24px 8px; }
   .card-pair .pie-col .chart-wrap.donut{ height:170px; }
   .card-pair .pie-col .legend{ margin-top:0; }
+  /* the compare card's three figures, kept on one line at half width */
+  .card-pair .kpi-row{ grid-template-columns:repeat(3, minmax(0, 1fr)); gap:10px; }
+  .card-pair .kpi{ padding:12px 14px; }
+  .card-pair .kpi .value{ font-size:18px; }
 }
 @media (max-width:1000px){ .card-pair{ flex-direction:column; } }
