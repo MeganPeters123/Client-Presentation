@@ -37,6 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from holdings_parsers import parse_holdings_file  # noqa: E402
+import supabase_push  # noqa: E402
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
 
@@ -490,7 +491,16 @@ def main():
     out_path = Path(config["output"])
     count = write_history(best, out_path)
     print(f"\nWrote {count} snapshot(s) to {out_path}")
-    print('Import it in the dashboard: Data panel -> "Import history".')
+
+    # The file above stays the system of record; this is a copy the dashboard can read
+    # without being imported. Re-read rather than re-serialise, so what goes up is exactly
+    # what went to disk. A failure here reports and leaves the file untouched.
+    if supabase_push.configured(config):
+        with open(out_path, "r", encoding="utf-8") as fh:
+            written = json.load(fh)
+        supabase_push.push(config, periods=written.get("periods"), trades=written.get("trades"))
+    else:
+        print('Import it in the dashboard: Data panel -> "Import history".')
 
     if args.archive and config.get("archive_dir"):
         copied = archive_files(best, config["archive_dir"])

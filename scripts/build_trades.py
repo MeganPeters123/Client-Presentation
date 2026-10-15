@@ -23,6 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from trade_parsers import classify, parse_trade_file  # noqa: E402
+import supabase_push  # noqa: E402
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
 DEFAULTS_PATH = Path(__file__).parent / "classification_defaults.json"
@@ -281,6 +282,11 @@ def main():
 
     count = write_into_history(summary, Path(config["output"]))
     print(f"\nWrote trade activity for {count} month(s) into {config['output']}")
+
+    if supabase_push.configured(config):
+        with open(config["output"], "r", encoding="utf-8") as fh:
+            written = json.load(fh)
+        supabase_push.push(config, trades=written.get("trades"))
 
 
 if __name__ == "__main__":
