@@ -254,10 +254,4 @@ table.data-table tr:hover td{ background:var(--surface-2); }
 }
 @media (max-width:1000px){ .card-pair{ flex-direction:column; } }
 
-/* the blotter gets the larger share — its columns need ~650px — and the chart keeps its own
-   height rather than stretching to match a 420px scrolling table */
-@media (min-width:1001px){
-  .card-pair-trades{ align-items:flex-start; }
-  .card-pair-trades > #tradesCard{ flex-grow:1.5; }
-}
 
