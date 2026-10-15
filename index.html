@@ -28,6 +28,26 @@
       <svg class="chev" viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
     <div class="data-panel-body">
+      <!-- The saved history, read from Supabase instead of imported. Hidden entirely if the
+           library does not load, so the file route is never blocked by it. -->
+      <div id="cloudPanel" style="display:none; border:1px solid var(--border); border-radius:var(--radius-md); padding:14px 16px; margin-bottom:16px;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <strong style="font-size:13px;">Saved history</strong>
+          <span class="card-subtitle" id="cloudStatus">Checking…</span>
+          <div class="spacer" style="flex:1;"></div>
+          <div id="cloudSignedOut" style="display:none; gap:8px; align-items:center; flex-wrap:wrap;">
+            <input type="email" id="cloudEmail" placeholder="you@aylett.co.za" autocomplete="username" style="min-width:190px;">
+            <input type="password" id="cloudPassword" placeholder="Password" autocomplete="current-password" style="min-width:150px;">
+            <button class="btn" id="cloudSignInBtn">Sign in</button>
+          </div>
+          <div id="cloudSignedIn" style="display:none; gap:8px; align-items:center;">
+            <button class="btn" id="cloudLoadBtn">Load latest</button>
+            <button class="btn" id="cloudSignOutBtn">Sign out</button>
+          </div>
+        </div>
+        <div class="card-subtitle" id="cloudHint" style="margin-top:8px;"></div>
+      </div>
+
       <div class="upload-grid">
         <div class="upload-slot" id="slot-aum" data-kind="aum">
           <svg viewBox="0 0 24 24" fill="none"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -569,12 +589,14 @@
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="js/data.js?v=aa90985f"></script>
 <script src="js/holdings.js?v=bc26bb55"></script>
 <script src="js/history.js?v=f5df62c3"></script>
 <script src="js/lookthrough.js?v=3ffb410b"></script>
+<script src="js/cloud.js?v=e903ae67"></script>
 <script src="js/activeshare.js?v=4feb3c48"></script>
 <script src="js/charts.js?v=2e46e157"></script>
-<script src="js/app.js?v=bbe97b41"></script>
+<script src="js/app.js?v=8cbb6718"></script>
 </body>
 </html>

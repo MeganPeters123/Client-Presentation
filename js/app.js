@@ -1850,3 +1850,81 @@ function renderAll() {
 }
 
 renderAll();
+
+/* ---------- saved history, read from Supabase ---------- */
+
+/** The panel reflects one of three states and nothing else: the library did not load, you
+ *  are signed out, you are signed in. Everything in it is additive — Import history still
+ *  works, and a browser that never signs in behaves exactly as it did before. */
+async function renderCloudPanel(message) {
+  const panel = document.getElementById("cloudPanel");
+  if (!panel) return;
+  if (typeof cloudAvailable !== "function" || !cloudAvailable()) { panel.style.display = "none"; return; }
+  panel.style.display = "block";
+
+  const status = document.getElementById("cloudStatus");
+  const hint = document.getElementById("cloudHint");
+  const out = document.getElementById("cloudSignedOut");
+  const inn = document.getElementById("cloudSignedIn");
+
+  let session = null;
+  try { session = await cloudSession(); } catch (e) { /* treated as signed out */ }
+
+  out.style.display = session ? "none" : "flex";
+  inn.style.display = session ? "flex" : "none";
+  status.textContent = session ? `Signed in as ${session.user.email}` : "Sign in to load it";
+  if (message !== undefined) hint.textContent = message;
+  else if (!session) hint.textContent = "Nobody can read this without signing in. The file route still works if you would rather use it.";
+}
+
+async function cloudLoadIntoDashboard() {
+  const hint = document.getElementById("cloudHint");
+  const btn = document.getElementById("cloudLoadBtn");
+  btn.disabled = true;
+  hint.textContent = "Loading…";
+  try {
+    const res = await cloudLoadHistory();
+    renderHistorySummary();
+    renderAll();
+    hint.textContent = `Loaded ${res.snapshots} snapshots and ${res.tradeMonths} months of trade activity.`;
+    showToast(`Loaded ${res.snapshots} snapshots from the saved history`);
+  } catch (e) {
+    console.error(e);
+    hint.textContent = `Could not load: ${e.message}. The .json file is still there to import.`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+if (document.getElementById("cloudPanel")) {
+  document.getElementById("cloudSignInBtn").addEventListener("click", async () => {
+    const hint = document.getElementById("cloudHint");
+    const email = document.getElementById("cloudEmail").value.trim();
+    const password = document.getElementById("cloudPassword").value;
+    if (!email || !password) { hint.textContent = "Both an email and a password are needed."; return; }
+    hint.textContent = "Signing in…";
+    try {
+      await cloudSignIn(email, password);
+      document.getElementById("cloudPassword").value = "";
+      await renderCloudPanel("Signed in. Load latest brings down the saved history.");
+      await cloudLoadIntoDashboard();     // signing in to then click again is a step too many
+    } catch (e) {
+      await renderCloudPanel(`Could not sign in: ${e.message}`);
+    }
+  });
+
+  // Enter in either field signs in, rather than silently doing nothing
+  ["cloudEmail", "cloudPassword"].forEach(id =>
+    document.getElementById(id).addEventListener("keydown", e => {
+      if (e.key === "Enter") document.getElementById("cloudSignInBtn").click();
+    }));
+
+  document.getElementById("cloudLoadBtn").addEventListener("click", cloudLoadIntoDashboard);
+
+  document.getElementById("cloudSignOutBtn").addEventListener("click", async () => {
+    await cloudSignOut();
+    await renderCloudPanel("Signed out. What is already loaded stays until you reload the page.");
+  });
+
+  renderCloudPanel();
+}
