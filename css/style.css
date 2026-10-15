@@ -264,3 +264,12 @@ table.data-table tr:hover td{ background:var(--surface-2); }
   .card-pair-trades{ align-items:flex-start; }
   .card-pair-trades > #tradesCard{ flex-grow:1.5; }
 }
+
+/* at half width the pie of a pie has no room for its labels side by side, so the two donuts
+   stack instead, each keeping the full card width — the inline flex basis is a width and
+   would turn into a height in a column, hence the !important */
+@media (min-width:1001px){
+  .card-pair #breakdownCharts{ flex-direction:column; align-items:stretch !important; }
+  .card-pair #breakdownCharts > .chart-wrap{ flex:0 0 auto !important; width:100%; }
+  .card-pair #breakdownSplitLink{ flex:0 0 auto !important; transform:rotate(90deg); }
+}

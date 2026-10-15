@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aylett & Co — AUM Dashboard</title>
-<link rel="stylesheet" href="css/style.css?v=7fab76fe">
+<link rel="stylesheet" href="css/style.css?v=718d9ac5">
 </head>
 <body>
 
@@ -25,6 +25,7 @@
     <button class="tab" role="tab" data-target="overview">Overview</button>
     <button class="tab" role="tab" data-target="allocation">Allocation</button>
     <button class="tab" role="tab" data-target="holdings">Holdings</button>
+    <button class="tab" role="tab" data-target="analysis">Analysis</button>
     <button class="tab" role="tab" data-target="trades">Trades</button>
     <button class="tab" role="tab" data-target="data">Data</button>
   </nav>
@@ -323,55 +324,6 @@
 
   </div>
 
-  <div id="breakdownCard" data-tab="allocation" class="card" style="display:none;">
-    <div class="card-head">
-      <div>
-        <div class="card-title">Exposure Breakdown</div>
-        <div class="card-subtitle" id="breakdownSubtitle">The same holdings cut by currency</div>
-      </div>
-      <div class="funds-controls">
-        <div class="seg" id="breakdownBySeg">
-          <button class="active" data-val="ccy">Currency</button>
-          <button data-val="sector">Sector</button>
-        </div>
-        <select id="breakdownFund"></select>
-        <select id="breakdownPeriod"></select>
-      </div>
-    </div>
-    <!-- the charts take the full width: a labelled pie of a pie needs room for the labels,
-         and sharing the row with the table left it 467px to work in -->
-    <div id="breakdownCharts" style="display:flex; align-items:center; gap:4px; min-width:0;">
-      <div class="chart-wrap donut breakdown-donut" id="breakdownSplitWrap" style="flex:1 1 42%; min-width:0;">
-        <canvas id="breakdownSplitChart"></canvas>
-      </div>
-      <div id="breakdownSplitLink" style="flex:0 0 20px; text-align:center; color:var(--ink-muted); font-size:20px; line-height:1;">›</div>
-      <div class="chart-wrap donut breakdown-donut" style="flex:1 1 58%; min-width:0;"><canvas id="breakdownChart"></canvas></div>
-    </div>
-    <div style="margin-top:16px; max-width:460px;">
-      <div class="table-scroll">
-        <table class="data-table" id="breakdownTable">
-          <thead><tr><th id="breakdownKeyCol">Currency</th><th style="text-align:right;">% of Fund</th></tr></thead>
-          <tbody></tbody>
-          <tfoot></tfoot>
-        </table>
-      </div>
-      <div class="card-subtitle" id="breakdownNote" style="margin-top:10px;"></div>
-    </div>
-    <div id="sectorAssignWrap" style="display:none; margin-top:18px; border-top:1px solid var(--border); padding-top:14px;">
-      <div class="card-subtitle" style="margin-bottom:8px;" id="sectorAssignTitle">Positions with no sector</div>
-      <div class="table-scroll" style="max-height:260px;">
-        <table class="data-table" id="sectorAssignTable">
-          <thead><tr><th>Holding</th><th style="text-align:right;">Weight</th><th style="text-align:right;">GICS sector</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="card-subtitle" style="margin-top:8px;">
-        Set these once and they are remembered. Add a <strong>Sector</strong> column to the
-        "SA Income Categories" tab and they fill in from there instead.
-      </div>
-    </div>
-  </div>
-
   <!-- side by side on a wide screen; either card fills the row alone if the other is hidden -->
   <div class="card-pair">
 
@@ -461,7 +413,60 @@
 
   </div>
 
-  <div id="activeShareCard" data-tab="holdings" class="card" style="display:none;">
+  <!-- side by side on a wide screen; either card fills the row alone if the other is hidden -->
+  <div class="card-pair">
+
+  <div id="breakdownCard" data-tab="analysis" class="card" style="display:none;">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Exposure Breakdown</div>
+        <div class="card-subtitle" id="breakdownSubtitle">The same holdings cut by currency</div>
+      </div>
+      <div class="funds-controls">
+        <div class="seg" id="breakdownBySeg">
+          <button class="active" data-val="ccy">Currency</button>
+          <button data-val="sector">Sector</button>
+        </div>
+        <select id="breakdownFund"></select>
+        <select id="breakdownPeriod"></select>
+      </div>
+    </div>
+    <!-- the charts take the full width: a labelled pie of a pie needs room for the labels,
+         and sharing the row with the table left it 467px to work in. Beside Active Share the
+         card is half width, so there the two donuts stack and each keeps the full width -->
+    <div id="breakdownCharts" style="display:flex; align-items:center; gap:4px; min-width:0;">
+      <div class="chart-wrap donut breakdown-donut" id="breakdownSplitWrap" style="flex:1 1 42%; min-width:0;">
+        <canvas id="breakdownSplitChart"></canvas>
+      </div>
+      <div id="breakdownSplitLink" style="flex:0 0 20px; text-align:center; color:var(--ink-muted); font-size:20px; line-height:1;">›</div>
+      <div class="chart-wrap donut breakdown-donut" style="flex:1 1 58%; min-width:0;"><canvas id="breakdownChart"></canvas></div>
+    </div>
+    <div style="margin-top:16px; max-width:460px;">
+      <div class="table-scroll">
+        <table class="data-table" id="breakdownTable">
+          <thead><tr><th id="breakdownKeyCol">Currency</th><th style="text-align:right;">% of Fund</th></tr></thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
+      <div class="card-subtitle" id="breakdownNote" style="margin-top:10px;"></div>
+    </div>
+    <div id="sectorAssignWrap" style="display:none; margin-top:18px; border-top:1px solid var(--border); padding-top:14px;">
+      <div class="card-subtitle" style="margin-bottom:8px;" id="sectorAssignTitle">Positions with no sector</div>
+      <div class="table-scroll" style="max-height:260px;">
+        <table class="data-table" id="sectorAssignTable">
+          <thead><tr><th>Holding</th><th style="text-align:right;">Weight</th><th style="text-align:right;">GICS sector</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="card-subtitle" style="margin-top:8px;">
+        Set these once and they are remembered. Add a <strong>Sector</strong> column to the
+        "SA Income Categories" tab and they fill in from there instead.
+      </div>
+    </div>
+  </div>
+
+  <div id="activeShareCard" data-tab="analysis" class="card" style="display:none;">
     <div class="card-head">
       <div>
         <div class="card-title">Active Share</div>
@@ -516,6 +521,8 @@
         </div>
       </div>
     </div>
+  </div>
+
   </div>
 
   <!-- the chart beside the blotter; the monthly table needs the full width, so it gets its own card below -->
@@ -635,7 +642,7 @@
 <script src="js/cloud.js?v=135f4803"></script>
 <script src="js/activeshare.js?v=8b311ded"></script>
 <script src="js/charts.js?v=2e46e157"></script>
-<script src="js/tabs.js?v=956b76b8"></script>
+<script src="js/tabs.js?v=3dbdd37d"></script>
 <script src="js/app.js?v=0f60ac98"></script>
 </body>
 </html>
