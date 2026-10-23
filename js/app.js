@@ -887,7 +887,6 @@ function renderAllocationSection() {
   const caption = what => `${what} · ${scope}`;
 
   document.getElementById("assetClassPieSub").textContent = caption("As the custodian reports it");
-  document.getElementById("currencyPieSub").textContent = caption("Trading currency, cash included");
 
   const colorFor = (k, i) => LOOKTHROUGH_COLORS[k] || CURRENCY_COLORS[k] || colorForCategory(k, i);
 
@@ -941,12 +940,9 @@ function renderAllocationSection() {
     document.getElementById("lookThroughPieLegend").innerHTML = "";
   }
 
-  // 3. currency
-  const bd = month
-    ? (oneFund ? computeBreakdown(positionFund, month, { by: "ccy", expandFunds })
-               : computeBreakdownConsolidated(month, { by: "ccy", expandFunds }))
-    : null;
-  renderPie("currencyPie", "currencyPieLegend", bd ? bd.rows : [], colorFor);
+  // Currency used to be a third pie here. It moved to Exposure Breakdown, which shows the
+  // same split with cash separated out instead of folded in — two charts of one thing, one
+  // of them less true, was worse than one.
 }
 
 /* ---------- Asset Allocation look-through ---------- */

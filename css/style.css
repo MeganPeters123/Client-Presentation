@@ -221,8 +221,8 @@ table.data-table tr:hover td{ background:var(--surface-2); }
 
 /* Three donuts reading as one comparison: same size, same colour language, captions that
    say what each one answers. Collapses to two then one as the page narrows. */
-.pie-row{ display:grid; grid-template-columns:repeat(3, 1fr); gap:20px; }
-@media (max-width: 980px){ .pie-row{ grid-template-columns:repeat(2, 1fr); } }
+/* two pies since currency moved to Exposure Breakdown; three columns would leave a hole */
+.pie-row{ display:grid; grid-template-columns:repeat(2, 1fr); gap:20px; }
 @media (max-width: 640px){ .pie-row{ grid-template-columns:1fr; } }
 .pie-col{ min-width:0; }
 .pie-title{ font-size:12.5px; font-weight:650; }
