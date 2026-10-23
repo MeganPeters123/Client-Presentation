@@ -1885,11 +1885,14 @@ function renderTopTradesSection() {
   const head = `<tr><th>#</th><th>Share</th><th style="text-align:right;">Value</th>${extraHead}` +
                `<th style="text-align:right;">Trades</th></tr>`;
 
+  // the chart is drawn from the very rows the tables print, so the two cannot disagree
+  const drawn = {};
   [["Buy", "topBuysTable"], ["Sell", "topSellsTable"]].forEach(([side, id]) => {
     const rows = sideRows ? sideRows[side] : [...bySide[side].values()]
       .filter(r => r.value > 0)
       .sort((a, b) => topTradesOrder === "top" ? b.value - a.value : a.value - b.value)
       .slice(0, TOP_TRADES_N);
+    drawn[side] = rows;
     const table = document.getElementById(id);
     table.querySelector("thead").innerHTML = head;
     table.querySelector("tbody").innerHTML = rows.length ? rows.map((r, i) => `
@@ -1903,6 +1906,19 @@ function renderTopTradesSection() {
       </tr>`).join("")
       : `<tr><td colspan="5" style="color:var(--ink-muted);">${netMode ? "None" : `No ${side.toLowerCase()}s`}</td></tr>`;
   });
+
+  // Nothing is drawn when the card is explaining why it has nothing to show. The body is
+  // hidden either way, but up and down weights against "all funds" falls back to gross
+  // figures, and a chart built from numbers the card is declining to show is one stale
+  // render away from being believed.
+  if (nothing) {
+    renderTopTradesChart([], [], "ZAR", netMode);
+  } else {
+    // one currency per fund, so the axis carries a single unit; "all" is the rand book
+    const chartCcy = fund === "all" ? "ZAR"
+      : ((drawn.Buy[0] || drawn.Sell[0] || {}).ccy || "ZAR");
+    renderTopTradesChart(drawn.Buy, drawn.Sell, chartCcy, netMode);
+  }
 
   const span = from === to ? monthLabelFromKey(from) : `${monthLabelFromKey(from)} – ${monthLabelFromKey(to)}`;
   document.getElementById("topTradesSubtitle").textContent =

@@ -551,6 +551,11 @@
     </div>
     <div id="topTradesEmpty" class="empty-hint" style="padding:24px 20px; display:none;"></div>
     <div id="topTradesBody">
+      <!-- one axis, buys right and sells left, so the two sides are read against each other
+           rather than as two lists that happen to sit side by side -->
+      <div class="chart-wrap" id="topTradesChartWrap" style="height:320px; margin-bottom:18px;">
+        <canvas id="topTradesChart"></canvas>
+      </div>
       <div class="grid2">
         <div>
           <div class="card-subtitle" style="margin-bottom:8px;" id="topBuysLabel">Buys</div>
@@ -652,8 +657,8 @@
 <script src="js/lookthrough.js?v=6ddcbd87"></script>
 <script src="js/cloud.js?v=bf706f5d"></script>
 <script src="js/activeshare.js?v=8b311ded"></script>
-<script src="js/charts.js?v=217fd5ea"></script>
+<script src="js/charts.js?v=1daaa1e9"></script>
 <script src="js/tabs.js?v=74ed04a5"></script>
-<script src="js/app.js?v=053717ab"></script>
+<script src="js/app.js?v=2a9c718a"></script>
 </body>
 </html>

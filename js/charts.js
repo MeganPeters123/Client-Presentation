@@ -534,3 +534,62 @@ function destroyCharts() {
   if (activeShareChartInstance) { activeShareChartInstance.destroy(); activeShareChartInstance = null; }
   Object.keys(pieInstances).forEach(k => { pieInstances[k].destroy(); delete pieInstances[k]; });
 }
+
+let topTradesChartInstance = null;
+
+/** Buys and sells on one axis.
+ *
+ *  Both sides are drawn from the same rows the tables use, sells carried negative so the
+ *  bars run either side of zero. Reading two tables means holding one column in your head
+ *  while you scan the other; a diverging bar puts the comparison in front of you — the
+ *  share bought most and the share sold most are the two ends of the same line.
+ *
+ *  Values stay in the fund's own currency. Nothing here converts anything. */
+function renderTopTradesChart(buys, sells, ccy, netMode) {
+  const wrap = document.getElementById("topTradesChartWrap");
+  const ctx = document.getElementById("topTradesChart");
+  if (!ctx) return;
+  if (topTradesChartInstance) { topTradesChartInstance.destroy(); topTradesChartInstance = null; }
+
+  // sells arrive positive in gross mode and already negative in net mode
+  const rows = [
+    ...buys.map(r => ({ name: r.security, value: Math.abs(r.value) })),
+    ...sells.map(r => ({ name: r.security, value: -Math.abs(r.value) }))
+  ].sort((a, b) => b.value - a.value);
+
+  if (!rows.length) { wrap.style.display = "none"; return; }
+  wrap.style.display = "block";
+  // a row needs room to be read; the wrapper grows rather than the bars being squeezed
+  wrap.style.height = Math.max(180, 26 * rows.length + 54) + "px";
+
+  const ink2 = cssVar("--ink-2"), grid = cssVar("--grid");
+  const good = cssVar("--good"), bad = cssVar("--bad");
+
+  topTradesChartInstance = new Chart(ctx.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels: rows.map(r => r.name),
+      datasets: [{
+        data: rows.map(r => r.value),
+        backgroundColor: rows.map(r => (r.value >= 0 ? good : bad)),
+        borderWidth: 0
+      }]
+    },
+    options: {
+      indexAxis: "y",
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c =>
+          `${netMode ? (c.parsed.x >= 0 ? "Up weight" : "Down weight") : (c.parsed.x >= 0 ? "Bought" : "Sold")}: `
+          + fmtTradeValue(Math.abs(c.parsed.x), ccy) } }
+      },
+      scales: {
+        x: { ticks: { color: ink2, callback: v => fmtTradeValue(Math.abs(v), ccy) },
+             grid: { color: grid, zeroLineColor: ink2 } },
+        y: { ticks: { color: ink2, font: { size: 11 }, autoSkip: false },
+             grid: { color: "transparent" } }
+      }
+    }
+  });
+}
