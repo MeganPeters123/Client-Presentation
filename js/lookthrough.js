@@ -155,7 +155,7 @@ const GICS_SECTORS = [
 
 function loadSaIncStore() {
   const empty = { source: {}, manual: {}, funds: {}, listing: {}, sector: {}, sectorSource: {},
-                  gicsSource: {}, gicsFileName: "", gicsLoadedAt: null,
+                  gicsSource: {}, gicsNames: {}, gicsFileName: "", gicsLoadedAt: null,
                   fileName: "", sheetName: "", loadedAt: null };
   try {
     const raw = localStorage.getItem(SAINC_STORAGE_KEY);
@@ -249,11 +249,21 @@ function setListingOverride(ticker, listing) {
 }
 
 /** Sector for a ticker: what you set here first, then a Sector column off the research tab. */
-function lookupSector(ticker) {
+/** Sector for a holding. The name is optional and is tried only once every identifier has
+ *  failed: some exports carry an ISIN the GICS workbook does not, and the company name is
+ *  then the only thing the two have in common. Exact match on a normalised name, never
+ *  fuzzy — a near-miss here puts a company in the wrong sector on a client slide. */
+function gicsNameKey(name) {
+  return String(name == null ? "" : name).toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+function lookupSector(ticker, name) {
   const keys = [rawTicker(ticker), normTicker(ticker)];
   for (const k of keys) if (k && saIncStore.sector[k]) return { sector: saIncStore.sector[k], origin: "manual" };
   for (const k of keys) if (k && (saIncStore.gicsSource || {})[k]) return { sector: saIncStore.gicsSource[k], origin: "gics" };
   for (const k of keys) if (k && saIncStore.sectorSource[k]) return { sector: saIncStore.sectorSource[k], origin: "source" };
+  const n = gicsNameKey(name);
+  if (n && (saIncStore.gicsNames || {})[n]) return { sector: saIncStore.gicsNames[n], origin: "gics-name" };
   return { sector: null, origin: null };
 }
 
@@ -576,7 +586,7 @@ function computeBreakdown(fund, monthKey, { by = "ccy", expandFunds = true } = {
         // that they are simply not equity, so they get their own row
         if (isNonEquityHolding(h)) key = "Cash & Fixed Income";
         else {
-          key = lookupSector(h.ticker).sector;
+          key = lookupSector(h.ticker, h.name).sector;
           if (!key) {
             const uk = rawTicker(h.ticker) || h.name;
             const prev = unclassified.get(uk);
@@ -749,6 +759,18 @@ async function importGicsFromFile(file) {
   const header = (rows[0] || []).map(norm);
   const sedolCol = header.findIndex(h => h.includes("sedol"));
   const tickerCol = header.findIndex(h => h.includes("ticker"));
+  // the company-name column with the most filled cells — same trick as the sector column,
+  // since the formula copy of it reads #NAME? without a Bloomberg terminal
+  const nameCol = header
+    .map((h, i) => ({ i, h }))
+    .filter(c => c.h.includes("compname") || c.h.includes("name") && !c.h.includes("sector")
+                 && !c.h.includes("industry"))
+    .map(c => ({ ...c, score: rows.slice(1).filter(r => {
+      const v = String(r[c.i] == null ? "" : r[c.i]).trim();
+      return v && !v.startsWith("#");
+    }).length }))
+    .sort((a, b) => b.score - a.score)
+    .map(c => c.i)[0];
   if (tickerCol < 0) throw new Error("no Ticker column on that sheet");
 
   const usable = v => {
@@ -766,6 +788,8 @@ async function importGicsFromFile(file) {
   const sectorCol = candidates[0].i;
 
   const map = {};
+  const names = {};          // normalised company name -> sector, for a last-resort match
+  const nameClash = new Set();
   let securities = 0;
   const noSector = [];
   rows.slice(1).forEach(r => {
@@ -776,10 +800,20 @@ async function importGicsFromFile(file) {
     const sector = GICS_SECTORS.find(g => g.toLowerCase() === raw.toLowerCase()) || raw;
     securities++;
     gicsKeys(ticker, sedolCol >= 0 ? r[sedolCol] : null).forEach(k => { map[k] = sector; });
+    const nameKey = gicsNameKey(nameCol >= 0 ? r[nameCol] : null);
+    if (nameKey) {
+      if (names[nameKey] && names[nameKey] !== sector) nameClash.add(nameKey);
+      names[nameKey] = sector;
+    }
   });
+
+  // a name that means two different sectors is dropped rather than guessed at — the same
+  // rule that keeps AMS from being Anglo American Platinum and Amadeus at once
+  nameClash.forEach(k => { delete names[k]; });
 
   // its own field, so re-importing the revenue split workbook cannot wipe it
   saIncStore.gicsSource = map;
+  saIncStore.gicsNames = names;
   saIncStore.gicsFileName = file.name;
   saIncStore.gicsLoadedAt = new Date().toISOString();
   persistSaIncStore();
@@ -788,6 +822,7 @@ async function importGicsFromFile(file) {
 
 function clearGicsSource() {
   saIncStore.gicsSource = {};
+  saIncStore.gicsNames = {};
   saIncStore.gicsFileName = "";
   saIncStore.gicsLoadedAt = null;
   persistSaIncStore();
