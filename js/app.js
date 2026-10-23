@@ -124,6 +124,7 @@ async function handleUpload(kind, file) {
   if (kind === "holdings") { await handleHoldingsUpload(file); return; }
   if (kind === "saincome") { await handleSaIncomeUpload(file); return; }
   if (kind === "indexweights") { await handleIndexWeightsUpload(file); return; }
+  if (kind === "gics") { await handleGicsUpload(file); return; }
   try {
     const { headers, rows } = await parseFile(file);
     pendingUpload = { kind, headers, rows, fileName: file.name };
@@ -1416,7 +1417,9 @@ function renderBreakdownSection() {
   // Sector is parked until there is a mapping to drive it — no file we receive carries GICS,
   // and an all-"Not classified" chart is just noise. Add a Sector column to the research tab
   // and the choice reappears on its own.
-  const haveSectors = Object.keys(saIncStore.sectorSource).length + Object.keys(saIncStore.sector).length > 0;
+  const haveSectors = Object.keys(saIncStore.sectorSource).length
+    + Object.keys(saIncStore.gicsSource || {}).length
+    + Object.keys(saIncStore.sector).length > 0;
   document.getElementById("breakdownBySeg").style.display = haveSectors ? "" : "none";
   if (!haveSectors && breakdownBy === "sector") {
     breakdownBy = "ccy";
@@ -2043,6 +2046,7 @@ function renderAll() {
   renderFundsSection();
   renderAllocationSection();
   renderSaIncomeSourceList();
+  renderGicsSourceList();
   renderIndexWeightsSourceList();
   renderLookThroughSection();
   renderActiveShareSection();
@@ -2145,4 +2149,54 @@ if (document.getElementById("cloudPanel")) {
   });
 
   renderCloudPanel();
+}
+
+/* ---------- GICS sectors ---------- */
+async function handleGicsUpload(file) {
+  try {
+    const res = await importGicsFromFile(file);
+    renderGicsSourceList();
+    renderBreakdownSection();
+    showToast(`GICS sectors loaded — ${res.securities} securities`);
+    // a row without a sector is a security the sector split cannot place, and it will show
+    // up as "Not classified" on the chart. Better to hear it now than wonder later.
+    if (res.noSector.length) {
+      setTimeout(() => showToast(
+        `${res.noSector.length} row(s) had no sector: ${res.noSector.slice(0, 4).join(", ")}`), 2800);
+    }
+  } catch (err) {
+    console.error(err);
+    showToast("Could not read that file: " + err.message);
+  }
+}
+
+function renderGicsSourceList() {
+  const slot = document.getElementById("slot-gics");
+  const list = document.getElementById("gicsSourceList");
+  const status = document.getElementById("status-gics");
+  if (!slot) return;
+  const map = saIncStore.gicsSource || {};
+  const securities = new Set(Object.values(map)).size ? Object.keys(map).length : 0;
+  if (!securities) {
+    slot.classList.remove("loaded");
+    status.textContent = "";
+    list.innerHTML = "";
+    return;
+  }
+  slot.classList.add("loaded");
+  // keys outnumber securities several times over — each is indexed under every spelling —
+  // so the count shown is of sectors, which is the thing that means something here
+  status.textContent = `${new Set(Object.values(map)).size} sectors`;
+  list.innerHTML = `
+    <div class="source-chip">
+      <span>${escAttr(saIncStore.gicsFileName || "GICS")}</span>
+      <span class="n">${Object.keys(map).length} keys</span>
+      <span class="rm" title="Remove">✕</span>
+    </div>`;
+  list.querySelector(".rm").addEventListener("click", ev => {
+    ev.stopPropagation();
+    clearGicsSource();
+    renderGicsSourceList();
+    renderBreakdownSection();
+  });
 }

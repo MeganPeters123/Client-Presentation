@@ -155,6 +155,7 @@ const GICS_SECTORS = [
 
 function loadSaIncStore() {
   const empty = { source: {}, manual: {}, funds: {}, listing: {}, sector: {}, sectorSource: {},
+                  gicsSource: {}, gicsFileName: "", gicsLoadedAt: null,
                   fileName: "", sheetName: "", loadedAt: null };
   try {
     const raw = localStorage.getItem(SAINC_STORAGE_KEY);
@@ -251,6 +252,7 @@ function setListingOverride(ticker, listing) {
 function lookupSector(ticker) {
   const keys = [rawTicker(ticker), normTicker(ticker)];
   for (const k of keys) if (k && saIncStore.sector[k]) return { sector: saIncStore.sector[k], origin: "manual" };
+  for (const k of keys) if (k && (saIncStore.gicsSource || {})[k]) return { sector: saIncStore.gicsSource[k], origin: "gics" };
   for (const k of keys) if (k && saIncStore.sectorSource[k]) return { sector: saIncStore.sectorSource[k], origin: "source" };
   return { sector: null, origin: null };
 }
@@ -702,4 +704,91 @@ function computeBreakdownConsolidated(monthKey, opts = {}) {
     bonds: Object.values(bondByKey).reduce((s, v) => s + v, 0),
     total
   };
+}
+
+/* ---------- GICS sectors, from the Bloomberg pull ---------- */
+
+/** Every spelling a holding might arrive under for one company.
+ *
+ *  The exports disagree about what a ticker is. The same share is "DGE LN" in one file,
+ *  "DGELN" in another and the SEDOL "0237400" in a third, and Hong Kong codes are numeric
+ *  so a bare 700 would collide with anything. Indexing each GICS row under all of them
+ *  means lookupSector finds it whichever way round the holding is written.
+ *
+ *  The asterisk matters: Bloomberg writes Becle as "CUERVO* MM Equity", and leaving it in
+ *  lost an 8% position. */
+function gicsKeys(ticker, sedol) {
+  const out = new Set();
+  const t = String(ticker == null ? "" : ticker)
+    .replace(/\s+Equity\s*$/i, "").replace(/\*/g, "").trim().toUpperCase();
+  if (t) {
+    out.add(t);
+    out.add(t.replace(/\s+/g, ""));
+    const m = t.match(/^(\S+)\s+([A-Z]{2})$/);
+    if (m) out.add(m[2] === "HK" ? "HK" + m[1] : m[1]);
+  }
+  const s = String(sedol == null ? "" : sedol).trim().toUpperCase();
+  if (s && !s.startsWith("#") && !/^SA |EQUITY$/i.test(s)) out.add(s);
+  return [...out].filter(Boolean);
+}
+
+/** Read the GICS workbook: a Sedol column, a Ticker column, and a GICS sector per row.
+ *
+ *  The sheet carries the Bloomberg formulas and their pasted results side by side, so the
+ *  formula columns read "#NAME?" on any machine without the terminal. Rather than assume a
+ *  position, every column whose header looks like a sector is scored on how many usable
+ *  values it holds and the best one wins — which picks the pasted results without caring
+ *  where they sit. */
+async function importGicsFromFile(file) {
+  const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+  const sheet = wb.SheetNames[0];
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheet], { header: 1, defval: null });
+  if (!rows.length) throw new Error("that sheet is empty");
+
+  const norm = h => String(h == null ? "" : h).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const header = (rows[0] || []).map(norm);
+  const sedolCol = header.findIndex(h => h.includes("sedol"));
+  const tickerCol = header.findIndex(h => h.includes("ticker"));
+  if (tickerCol < 0) throw new Error("no Ticker column on that sheet");
+
+  const usable = v => {
+    const s = String(v == null ? "" : v).trim();
+    return s && !s.startsWith("#");
+  };
+  const candidates = header
+    .map((h, i) => ({ i, h }))
+    .filter(c => c.h.includes("gicssectorname") || (c.h.includes("sector") && !c.h.includes("sub")))
+    .map(c => ({ ...c, score: rows.slice(1).filter(r => usable(r[c.i])).length }))
+    .sort((a, b) => b.score - a.score);
+  if (!candidates.length || !candidates[0].score) {
+    throw new Error("no column with readable GICS sector names — are the Bloomberg values pasted in?");
+  }
+  const sectorCol = candidates[0].i;
+
+  const map = {};
+  let securities = 0;
+  const noSector = [];
+  rows.slice(1).forEach(r => {
+    const ticker = r[tickerCol];
+    if (!ticker) return;                       // section headings sit alone in column A
+    const raw = String(r[sectorCol] == null ? "" : r[sectorCol]).trim();
+    if (!usable(raw)) { noSector.push(String(ticker).trim()); return; }
+    const sector = GICS_SECTORS.find(g => g.toLowerCase() === raw.toLowerCase()) || raw;
+    securities++;
+    gicsKeys(ticker, sedolCol >= 0 ? r[sedolCol] : null).forEach(k => { map[k] = sector; });
+  });
+
+  // its own field, so re-importing the revenue split workbook cannot wipe it
+  saIncStore.gicsSource = map;
+  saIncStore.gicsFileName = file.name;
+  saIncStore.gicsLoadedAt = new Date().toISOString();
+  persistSaIncStore();
+  return { securities, keys: Object.keys(map).length, noSector };
+}
+
+function clearGicsSource() {
+  saIncStore.gicsSource = {};
+  saIncStore.gicsFileName = "";
+  saIncStore.gicsLoadedAt = null;
+  persistSaIncStore();
 }
