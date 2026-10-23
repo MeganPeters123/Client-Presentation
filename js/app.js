@@ -1925,7 +1925,15 @@ function renderTopTradesSection() {
     `${fund === "all" ? "All rand funds" : fund} · ${span} · ` +
     (netMode ? "net traded value, continuing holdings" : `${topTradesOrder === "top" ? "largest" : "smallest"} first`);
 
+  // The three orders answer different questions, and the difference is not guessable from
+  // their names: the first two are one measure read from either end, the third is a
+  // different measure entirely. So the note leads with what you are looking at.
   const notes = [];
+  notes.push(netMode
+    ? "Up and down weights net buys against sells for each share, so a share traded heavily both ways barely moves — unlike Largest, which would show it twice at its gross value."
+    : topTradesOrder === "top"
+      ? "Largest ranks every buy and every sell by value, gross: a share both bought and sold appears on both sides. Up / down weights nets the two instead."
+      : "Smallest is the same gross list from the other end — the small top-ups and trims. Up / down weights nets buys against sells instead.");
   if (netMode && fund !== "all") notes.push(continuingKnown
     ? `Buys less sells for shares held at both ${monthLabelFromKey(shiftMonthKey(from, -1))} and ${monthLabelFromKey(to)}; entries and exits are under Portfolio Changes.`
     : "Holdings at one end of the period aren't saved, so entries and exits can't be told apart and every share is shown.");
