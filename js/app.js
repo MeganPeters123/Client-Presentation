@@ -107,7 +107,9 @@ function showToast(msg) {
 }
 
 /* ---------- upload wiring ---------- */
-["aum", "allocation", "trades", "holdings", "saincome", "indexweights"].forEach(kind => {
+// every slot in the Data panel has to be named here — a slot left off this list still
+// renders, and still looks droppable, while having no handler of any kind behind it
+["aum", "allocation", "trades", "holdings", "saincome", "indexweights", "gics"].forEach(kind => {
   const slot = document.getElementById("slot-" + kind);
   const input = document.getElementById("file-" + kind);
   slot.addEventListener("click", () => input.click());
