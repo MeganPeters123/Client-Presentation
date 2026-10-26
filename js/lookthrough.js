@@ -155,7 +155,7 @@ const GICS_SECTORS = [
 
 function loadSaIncStore() {
   const empty = { source: {}, manual: {}, funds: {}, listing: {}, sector: {}, sectorSource: {},
-                  gicsSource: {}, gicsNames: {}, gicsFileName: "", gicsLoadedAt: null,
+                  gicsSource: {}, gicsNames: {}, gicsCanonical: {}, gicsFileName: "", gicsLoadedAt: null,
                   fileName: "", sheetName: "", loadedAt: null };
   try {
     const raw = localStorage.getItem(SAINC_STORAGE_KEY);
@@ -200,7 +200,7 @@ function rawTicker(t) {
  *  "manual" (set by hand here), "source" (from the research file), "blank" (listed in the
  *  research file but with no value yet) or null (not in the file at all). */
 function lookupSaInc(ticker) {
-  const keys = [rawTicker(ticker), normTicker(ticker)];
+  const keys = saIncCandidates(ticker);
   for (const k of keys) {
     if (k && Object.prototype.hasOwnProperty.call(saIncStore.manual, k)) {
       return { pct: saIncStore.manual[k], origin: "manual" };
@@ -788,6 +788,9 @@ async function importGicsFromFile(file) {
   const sectorCol = candidates[0].i;
 
   const map = {};
+  // every identifier this security arrives under -> its plain ticker, which is how the
+  // research tab is keyed. The bridge from a SEDOL to "STJ".
+  const canonical = {};
   const names = {};          // normalised company name -> sector, for a last-resort match
   const nameClash = new Set();
   let securities = 0;
@@ -799,7 +802,11 @@ async function importGicsFromFile(file) {
     if (!usable(raw)) { noSector.push(String(ticker).trim()); return; }
     const sector = GICS_SECTORS.find(g => g.toLowerCase() === raw.toLowerCase()) || raw;
     securities++;
-    gicsKeys(ticker, sedolCol >= 0 ? r[sedolCol] : null).forEach(k => { map[k] = sector; });
+    const keys = gicsKeys(ticker, sedolCol >= 0 ? r[sedolCol] : null);
+    keys.forEach(k => { map[k] = sector; });
+    // the plain code is the shortest key with no space — "STJ" out of STJ LN / STJLN / STJ
+    const plain = keys.filter(k => !/\s/.test(k)).sort((a, b) => a.length - b.length)[0];
+    if (plain) keys.forEach(k => { canonical[k] = plain; });
     const nameKey = gicsNameKey(nameCol >= 0 ? r[nameCol] : null);
     if (nameKey) {
       if (names[nameKey] && names[nameKey] !== sector) nameClash.add(nameKey);
@@ -814,6 +821,7 @@ async function importGicsFromFile(file) {
   // its own field, so re-importing the revenue split workbook cannot wipe it
   saIncStore.gicsSource = map;
   saIncStore.gicsNames = names;
+  saIncStore.gicsCanonical = canonical;
   saIncStore.gicsFileName = file.name;
   saIncStore.gicsLoadedAt = new Date().toISOString();
   persistSaIncStore();
@@ -823,7 +831,58 @@ async function importGicsFromFile(file) {
 function clearGicsSource() {
   saIncStore.gicsSource = {};
   saIncStore.gicsNames = {};
+  saIncStore.gicsCanonical = {};
   saIncStore.gicsFileName = "";
   saIncStore.gicsLoadedAt = null;
   persistSaIncStore();
+}
+
+/* ---------- reaching a research entry however the holding is spelled ---------- */
+
+/** Ticker stems that mean more than one company in the saved history.
+ *
+ *  AMS is Amadeus in Madrid and Anglo American Platinum in Johannesburg, and the research
+ *  tab has one row for it. Matching on a stem is how a holding written one way reaches an
+ *  entry written another, and it is also how one company's revenue split would be handed to
+ *  a different company — so a stem that is not unique is never matched on.
+ *
+ *  Computed from the holdings rather than assumed, and recomputed when they change. */
+let ambiguousStemCache = null, ambiguousStemFor = null;
+
+function ambiguousStems() {
+  const stamp = Object.keys(historyStore.periods || {}).length;
+  if (ambiguousStemCache && ambiguousStemFor === stamp) return ambiguousStemCache;
+  const byStem = new Map();
+  Object.values(historyStore.periods || {}).forEach(snap =>
+    (snap.holdings || []).forEach(h => {
+      const s = normTicker(rawTicker(h.ticker));
+      if (!s) return;
+      const n = gicsNameKey(h.name);
+      if (!n) return;
+      (byStem.get(s) || byStem.set(s, new Set()).get(s)).add(n);
+    }));
+  ambiguousStemCache = new Set([...byStem].filter(([, names]) => names.size > 1).map(([s]) => s));
+  ambiguousStemFor = stamp;
+  return ambiguousStemCache;
+}
+
+/** Every form of a holding's identifier worth trying against the research tab, ambiguous
+ *  stems removed. The GICS workbook is used as the bridge from a SEDOL or a concatenated
+ *  ticker to the plain code the tab is keyed on, because it is the one file that carries
+ *  both for the same security. */
+function saIncCandidates(ticker) {
+  const raw = rawTicker(ticker);
+  const risky = ambiguousStems();
+  const out = [];
+  const add = k => { if (k && !out.includes(k)) out.push(k); };
+
+  add(raw);
+  const stem = normTicker(raw);
+  if (!risky.has(stem)) add(stem);
+
+  // via GICS: whatever this identifier is, which security is it, and what is that
+  // security's plain ticker?
+  const canon = (saIncStore.gicsCanonical || {})[raw] || (saIncStore.gicsCanonical || {})[stem];
+  if (canon && !risky.has(canon)) add(canon);
+  return out;
 }
