@@ -203,8 +203,8 @@ function rawTicker(t) {
 /** Returns { pct, origin } where pct is a fraction 0..1 and origin is one of
  *  "manual" (set by hand here), "source" (from the research file), "blank" (listed in the
  *  research file but with no value yet) or null (not in the file at all). */
-function lookupSaInc(ticker) {
-  const keys = saIncCandidates(ticker);
+function lookupSaInc(ticker, name) {
+  const keys = saIncCandidates(ticker, name);
   for (const k of keys) {
     if (k && Object.prototype.hasOwnProperty.call(saIncStore.manual, k)) {
       return { pct: saIncStore.manual[k], origin: "manual" };
@@ -482,8 +482,11 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
           const look = lookupSaInc(share);
           // ALSI and CTOP are JSE indices, so their constituents are SA-listed lines
           const listing = lookupListing(share, "ZAR");
-          equityWeight += wi;
-          if (look.origin === "source" || look.origin === "manual") mappedWeight += wi;
+          // coverage counts exposure, not direction: a short future spreads a negative
+          // notional across the index, and taking those signed would subtract an
+          // unresearched constituent from the denominator alone and read above 100%
+          equityWeight += Math.abs(wi);
+          if (look.origin === "source" || look.origin === "manual") mappedWeight += Math.abs(wi);
           buckets["SA Inc"] += wi * look.pct;
           buckets[listing.listing === "SA" ? "Quasi-Offshore" : "Offshore Equity"] += wi * (1 - look.pct);
           listed[listing.listing === "SA" ? "SA Equity" : "Offshore Equity"] += wi;
@@ -519,10 +522,10 @@ function computeLookThrough(fund, monthKey, { expandFunds = true } = {}) {
       // reaching here for a fund holding means it is being held as a single line, either by
       // choice or because we have no saved holdings for it
       const heldAsLine = isFundHolding(h);
-      const look = lookupSaInc(h.ticker);
+      const look = lookupSaInc(h.ticker, h.name);
       const listing = lookupListing(h.ticker, holdingCcy(h));
-      equityWeight += w;
-      if (look.origin === "source" || look.origin === "manual") mappedWeight += w;
+      equityWeight += Math.abs(w);
+      if (look.origin === "source" || look.origin === "manual") mappedWeight += Math.abs(w);
 
       const key = rawTicker(h.ticker) || h.name;
       const prev = positions.get(key);
@@ -872,6 +875,27 @@ const ISSUER_NOISE = new Set(["LTD", "LIMITED", "PLC", "INC", "CORP", "CORPORATI
  *  American Platinum, which is what the guard is for, while "Melco Resorts" and "Melco
  *  Crown Entertainment" stay one company. Comparing whole names instead treats every
  *  spelling variant as a second company and blocks matching that should happen. */
+/** A company that changed ticker, where the old code has since been taken over by a
+ *  different company. The code alone can no longer say who a holding is, so these are
+ *  matched on the code *and* the issuer name, and the holding is then treated as the
+ *  surviving company throughout.
+ *
+ *  Anglo American Platinum demerged from Anglo American plc and became Valterra Platinum on
+ *  28 May 2025, moving from AMS to VAL on the JSE. The history carries it as AMS up to
+ *  January 2025 and as VAL from June 2025, and AMS SQ is now Amadeus - so without this,
+ *  AMS is a code shared by two companies and matching on it is refused for both. */
+const RENAMED_ISSUERS = [
+  { stem: "AMS", issuer: "ANGLO", becomes: "VAL", named: "VALTERRA" }
+];
+
+/** The code and issuer a holding should be read as, after any rename is applied. */
+function resolveRenamedIssuer(stem, name) {
+  const issuer = issuerNameKey(name);
+  const hit = RENAMED_ISSUERS.find(r => r.stem === stem && r.issuer === issuer);
+  return hit ? { stem: hit.becomes, issuer: hit.named, renamed: true }
+             : { stem, issuer, renamed: false };
+}
+
 function issuerNameKey(name) {
   const words = String(name == null ? "" : name).toUpperCase()
     .replace(/[^A-Z0-9]+/g, " ").trim().split(" ")
@@ -886,10 +910,12 @@ function ambiguousStems() {
   const byStem = new Map();
   Object.values(historyStore.periods || {}).forEach(snap =>
     (snap.holdings || []).forEach(h => {
-      const s = normTicker(rawTicker(h.ticker));
-      if (!s) return;
-      const n = issuerNameKey(h.name);
-      if (!n) return;
+      const raw = normTicker(rawTicker(h.ticker));
+      if (!raw) return;
+      // a renamed company counts under its surviving code, so its old code is left to
+      // whoever holds it now rather than looking like two companies sharing one
+      const { stem: s, issuer: n } = resolveRenamedIssuer(raw, h.name);
+      if (!s || !n) return;
       (byStem.get(s) || byStem.set(s, new Set()).get(s)).add(n);
     }));
   ambiguousStemCache = new Set([...byStem].filter(([, names]) => names.size > 1).map(([s]) => s));
@@ -901,11 +927,16 @@ function ambiguousStems() {
  *  stems removed. The GICS workbook is used as the bridge from a SEDOL or a concatenated
  *  ticker to the plain code the tab is keyed on, because it is the one file that carries
  *  both for the same security. */
-function saIncCandidates(ticker) {
+function saIncCandidates(ticker, name) {
   const raw = rawTicker(ticker);
   const risky = ambiguousStems();
   const out = [];
   const add = k => { if (k && !out.includes(k)) out.push(k); };
+
+  // a renamed company is only ever itself: its old code now belongs to someone else, so the
+  // surviving code is the single thing to look up and the old one must not be tried
+  const renamed = resolveRenamedIssuer(normTicker(raw), name);
+  if (renamed.renamed) return [renamed.stem];
 
   add(raw);
   const stem = normTicker(raw);
