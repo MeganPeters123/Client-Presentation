@@ -161,7 +161,12 @@ async function handleSaIncomeUpload(file) {
     const res = await importSaIncFromFile(file);
     renderSaIncomeSourceList();
     renderLookThroughSection();
-    showToast(`SA revenue split loaded — ${res.valued} of ${res.tickers} tickers researched`);
+    // blank cells count as 0% SA by ruling, so say how many were read that way rather than
+    // letting a half-filled tab look fully researched
+    const blanks = (res.blankAsZero || []).length;
+    showToast(`SA revenue split loaded — ${res.tickers} tickers`
+      + (blanks ? `, ${blanks} blank cell(s) read as 0% SA` : ""));
+    if (blanks) console.info("Blank SA revenue cells read as 0%:", res.blankAsZero);
     // a value above 100% is almost certainly a stray decimal, and would multiply that
     // company's SA weighting on a client slide — say so rather than dropping it silently
     if (res.suspicious.length) {

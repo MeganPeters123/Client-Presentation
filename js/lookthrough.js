@@ -189,6 +189,10 @@ function normTicker(t) {
   let s = String(t == null ? "" : t).trim().toUpperCase().replace(/\*/g, "");
   const m = s.match(/^(\S+)\s+([A-Z]{2})$/);
   if (m) s = m[2] === "HK" ? "HK" + m[1] : m[1];
+  // Hong Kong codes arrive both spaced ("700 HK") and run together ("700HK") depending on the
+  // export, and the tab keys them as "HK700". Only a numeric code can take this form, so the
+  // test cannot catch a lettered ticker that merely ends in HK.
+  s = s.replace(/^(\d{1,5})HK$/, "HK$1");
   return s.replace(/(B\d|A\d)$/, "");
 }
 
@@ -310,6 +314,7 @@ async function importSaIncFromFile(file) {
   const source = {};
   const sectorSource = {};
   const suspicious = [];
+  const blankAsZero = [];
   rows.slice(1).forEach(r => {
     const key = rawTicker(r[tickerCol]);
     if (!key) return;
@@ -325,7 +330,13 @@ async function importSaIncFromFile(file) {
       if (v > 1) { suspicious.push({ ticker: key, value: v }); return; }
       source[key] = v;
     } else {
-      source[key] = null;   // listed, but not yet researched
+      // Megan's ruling, 2026-10-26: a blank cell means 0% SA revenue, not "not yet looked at".
+      // Every blank on the tab is an offshore name where nil SA revenue is the right answer,
+      // so they count as researched rather than showing as gaps. The figures do not move -
+      // an unresearched holding already contributed 0% - but the coverage reading becomes
+      // honest instead of understating what the tab actually covers.
+      source[key] = 0;
+      blankAsZero.push(key);
     }
   });
 
@@ -335,7 +346,8 @@ async function importSaIncFromFile(file) {
   saIncStore.sheetName = sheet;
   saIncStore.loadedAt = new Date().toISOString();
   persistSaIncStore();
-  return { ...saIncCounts(), sheet, suspicious, sectors: Object.keys(sectorSource).length };
+  return { ...saIncCounts(), sheet, suspicious, blankAsZero,
+           sectors: Object.keys(sectorSource).length };
 }
 
 function clearSaIncSource() {
@@ -849,6 +861,25 @@ function clearGicsSource() {
  *  Computed from the holdings rather than assumed, and recomputed when they change. */
 let ambiguousStemCache = null, ambiguousStemFor = null;
 
+/** Legal forms and filler the exports disagree about: one file writes "Tencent Holdings Ltd"
+ *  and another "TENCENT HOLDINGS LIMITED" for the same company. */
+const ISSUER_NOISE = new Set(["LTD", "LIMITED", "PLC", "INC", "CORP", "CORPORATION", "CO",
+  "COMPANY", "GROUP", "GRP", "HOLDINGS", "HOLDING", "HLDGS", "SA", "SAB", "NV", "BV", "AG",
+  "SE", "AB", "ASA", "SPA", "OYJ", "PTY", "LP", "DE", "CV", "ADR", "GDR", "THE", "CLASS"]);
+
+/** The issuer behind a holding name, for telling one company from another rather than one
+ *  spelling from another. The leading word is enough: it separates Amadeus from Anglo
+ *  American Platinum, which is what the guard is for, while "Melco Resorts" and "Melco
+ *  Crown Entertainment" stay one company. Comparing whole names instead treats every
+ *  spelling variant as a second company and blocks matching that should happen. */
+function issuerNameKey(name) {
+  const words = String(name == null ? "" : name).toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ").trim().split(" ")
+    .filter(w => w && !ISSUER_NOISE.has(w));
+  if (!words.length) return "";
+  return words[0].length > 2 ? words[0] : words.slice(0, 2).join("");
+}
+
 function ambiguousStems() {
   const stamp = Object.keys(historyStore.periods || {}).length;
   if (ambiguousStemCache && ambiguousStemFor === stamp) return ambiguousStemCache;
@@ -857,7 +888,7 @@ function ambiguousStems() {
     (snap.holdings || []).forEach(h => {
       const s = normTicker(rawTicker(h.ticker));
       if (!s) return;
-      const n = gicsNameKey(h.name);
+      const n = issuerNameKey(h.name);
       if (!n) return;
       (byStem.get(s) || byStem.set(s, new Set()).get(s)).add(n);
     }));
@@ -884,5 +915,9 @@ function saIncCandidates(ticker) {
   // security's plain ticker?
   const canon = (saIncStore.gicsCanonical || {})[raw] || (saIncStore.gicsCanonical || {})[stem];
   if (canon && !risky.has(canon)) add(canon);
+  // the GICS workbook's own plain ticker can itself be a suffixed or run-together form
+  // ("700HK" for Tencent), so a SEDOL only reaches the tab if the bridge is normalised too
+  const canonStem = normTicker(canon);
+  if (canonStem && canonStem !== canon && !risky.has(canonStem)) add(canonStem);
   return out;
 }
