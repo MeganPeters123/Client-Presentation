@@ -59,6 +59,7 @@ const ISSUER_ALIASES = {
   "BATS": "BTI",    // British American Tobacco plc
   "BUD": "ANH",     // AB InBev — the NYSE ADR over the same shares as the JSE listing
   "N91": "NY1",     // Ninety One plc / Ninety One Ltd, an equalised dual-listed company
+  "VALT": "VAL",    // Valterra Platinum — the London line over the same shares as the JSE one
   // Heineken Holding NV counted as Heineken NV, on Megan's instruction. Unlike the rest of
   // this map these are not two listings of one share: HEIO is a parent holding about half
   // of HEIA, and it trades at a standing discount. Treated as one issuer because the house
