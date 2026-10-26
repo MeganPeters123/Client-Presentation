@@ -181,6 +181,10 @@ async function importIndexWeightsFromFile(file) {
     const idx = (m.indices[code] = m.indices[code] || {
       label: [code, pick(r, "portfolio")].filter(Boolean).join(" "),
       sourceSheet: pick(r, "sourcesheet") || "",
+      // kept per index as well as per month: the indices in one file do not share a source
+      // date, and the month-level one is simply whichever index was read last. FINI15 lands
+      // a few days before the others, so a J200 figure was being stamped with FINI15's date.
+      sourceDate: isoDate(pick(r, "sourcedate")) || me,
       weights: {}
     });
     // the file carries decimals; percentages are what everything else here speaks
@@ -355,7 +359,9 @@ function computeActiveShare(fund, month, { indexCode, includeOffshore = false,
     nonEquityPct: (nonEquity / exp.total) * 100,
     offshoreWeight, nonEquityWeight,
     // both sides are that month's cut by construction — the lookup is keyed on the month
-    fundAsOf: exp.asOf, indexMonthEnd: mrec.monthEnd || null, indexSourceDate: mrec.sourceDate || null,
+    fundAsOf: exp.asOf, indexMonthEnd: mrec.monthEnd || null,
+    // the date of the index actually measured against, not of whichever was parsed last
+    indexSourceDate: info.sourceDate || mrec.sourceDate || null,
     consolidated: exp.consolidated,
     sourceSheet: info.sourceSheet, label: info.label
   };
