@@ -180,24 +180,40 @@ function renderTradeActivityChart(activity, series) {
    language the allocation donut and the look-through bars both speak. The Quasi-Offshore and
    Offshore Equity keys are kept because the engine still computes them; the charts fold both
    into Global Equity, so they carry its colour. */
+/* Blue-led, because the allocation tab's story is equity: the SA block deep, the global
+ * block light, so a bar reads as one family splitting rather than as unrelated colours.
+ *
+ * Cash stays warm on purpose. Eight categories cannot all live in the blue arc and stay
+ * apart: the dark-mode lightness band is only 0.19 wide, and every candidate searched
+ * across blue -> teal -> violet collapsed one of the pairs that actually touch (azure
+ * equity against a pale-blue cash fell to deltaE 5.3 under deuteranopia). Cash carries the
+ * one warm family so every blue stays legible, and property keeps its teal.
+ *
+ * Checked with the palette validator against the pairs that really do touch - computed from
+ * the holdings rather than assumed, 14 of them across the 18 funds - in both modes. Each
+ * clears normal-vision deltaE 15 and CVD deltaE 8.
+ *
+ * SA Inc shares the SA equity blue, as Global Equity already shares the global one: the
+ * colour marks the block, and the two columns either side of it show how that block
+ * redistributes. The row labels carry the rest. */
 const LOOKTHROUGH_COLORS = {
-  "JSE-listed Equity": "#00560a",
-  "SA Equity": "#00560a",
-  "SA Inc": "#008300",
-  "Global Equity": "#2a78d6",
-  "Global-listed Equity": "#2a78d6",
-  "Quasi-Offshore": "#2a78d6",
-  "Offshore Equity": "#2a78d6",
+  "JSE-listed Equity": "#2e5eba",
+  "SA Equity": "#2e5eba",
+  "SA Inc": "#2e5eba",
+  "Global Equity": "#369ed6",
+  "Global-listed Equity": "#369ed6",
+  "Quasi-Offshore": "#369ed6",
+  "Offshore Equity": "#369ed6",
   "JSE-listed Property": "#17796f",
   "SA Property": "#17796f",
   "Global-listed Property": "#63bdb2",
   "Offshore Property": "#63bdb2",
-  "SA Cash": "#eda100",
-  "Global Cash": "#8FAADC",
-  "Offshore Cash": "#8FAADC",
-  "SA Fixed Income": "#eb6834",
-  "Global Fixed Income": "#4a3aa7",
-  "Offshore Fixed Income": "#4a3aa7"
+  "SA Cash": "#a9731a",
+  "Global Cash": "#edb13a",
+  "Offshore Cash": "#edb13a",
+  "SA Fixed Income": "#803e9b",
+  "Global Fixed Income": "#c872ad",
+  "Offshore Fixed Income": "#c872ad"
 };
 
 let lookThroughChartInstance = null;
