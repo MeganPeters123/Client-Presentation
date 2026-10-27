@@ -1267,7 +1267,7 @@ function renderActiveShareSection() {
 
   const months = listIndexMonths();
   if (!months.length) {
-    empty.textContent = "Load the Index Weights file above to measure active share.";
+    empty.textContent = "Load the Index Weights file on the Data tab to measure active share.";
     empty.style.display = "block"; body.style.display = "none";
     return;
   }
@@ -1361,8 +1361,17 @@ function renderActiveShareSection() {
     notes.map(n => `<div class="card-subtitle" style="margin-bottom:8px;">${n}</div>`).join("");
 
   renderActiveShareChart(series.map(s => ({ month: s.month, value: s.value })));
+  document.getElementById("activeShareHeadlineSub").textContent =
+    `Latest reading, against ${series.length} month${series.length > 1 ? "s" : ""} measured so far`;
 
-  document.querySelector("#activeShareTable tbody").innerHTML = latest.rows.slice(0, 14).map(r => `
+  // the table is capped, so say what is being left out rather than implying it is the lot
+  const shownRows = latest.rows.slice(0, 14);
+  document.getElementById("activeSharePositionsSub").textContent =
+    latest.rows.length > shownRows.length
+      ? `The ${shownRows.length} widest gaps between the fund and the index, of ${latest.rows.length}`
+      : "The widest gaps between the fund and the index";
+
+  document.querySelector("#activeShareTable tbody").innerHTML = shownRows.map(r => `
     <tr>
       <td>${r.share}</td>
       <td class="num">${r.fund ? r.fund.toFixed(2) : "—"}</td>
@@ -1690,11 +1699,22 @@ function tradeSeriesToPlot(showAll) {
   return series;
 }
 
+/* ---------- Trades tab ---------- */
+/** The trades tab is one card of three steps, each shown or hidden on its own data: trading
+ *  activity needs a built history, top buys and sells needs trade months, the blotter needs
+ *  an uploaded file. The card carries the tab's data-tab, so it is what tabs.js watches —
+ *  it has to be shown whenever any step is, and gone when none of them are. */
+function syncTradesTabCard() {
+  const shown = ["tradeActivityCard", "topTradesCard", "tradesCard"]
+    .some(id => { const el = document.getElementById(id); return el && el.style.display !== "none"; });
+  document.getElementById("tradesTabCard").style.display = shown ? "block" : "none";
+}
+
 function renderTradeActivitySection() {
   const card = document.getElementById("tradeActivityCard");
   const activity = listTradeActivity();
-  if (!activity.length) { card.style.display = "none"; return; }
-  card.style.display = "block";
+  if (!activity.length) { card.style.display = "none"; syncTradesTabCard(); return; }
+  card.style.display = "block"; syncTradesTabCard();
 
   const showAll = document.getElementById("tradeShowAllClasses").checked;
   const series = tradeSeriesToPlot(showAll);
@@ -1783,8 +1803,8 @@ function fmtTradeValue(v, ccy) {
 function renderTopTradesSection() {
   const card = document.getElementById("topTradesCard");
   const months = listTopTradeMonths();
-  if (!months.length) { card.style.display = "none"; return; }
-  card.style.display = "block";
+  if (!months.length) { card.style.display = "none"; syncTradesTabCard(); return; }
+  card.style.display = "block"; syncTradesTabCard();
 
   const monthOpts = months.map(m => ({ value: m, label: monthLabelFromKey(m) }));
   const toSel = document.getElementById("topTradesTo");
@@ -1989,8 +2009,8 @@ function getTradeColumns() {
 
 function renderTradesSection() {
   const card = document.getElementById("tradesCard");
-  if (!state.trades.length) { card.style.display = "none"; return; }
-  card.style.display = "block";
+  if (!state.trades.length) { card.style.display = "none"; syncTradesTabCard(); return; }
+  card.style.display = "block"; syncTradesTabCard();
   document.getElementById("tradesSubtitle").textContent = state.tradeSources.length > 1
     ? `All buy and sell activity — merged from ${state.tradeSources.length} files`
     : "All buy and sell activity";

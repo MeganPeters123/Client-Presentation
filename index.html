@@ -491,144 +491,179 @@
       </div>
     </div>
     <div id="activeShareEmpty" class="empty-hint" style="padding:24px 20px;">
-      Load the Index Weights file above to measure active share.
+      Load the Index Weights file on the Data tab to measure active share.
     </div>
     <div id="activeShareBody" style="display:none;">
-      <div class="kpi-row" id="activeShareKpis" style="grid-template-columns:repeat(3,1fr);"></div>
-      <div id="activeShareWarnings"></div>
-      <div class="chart-wrap" style="height:240px;"><canvas id="activeShareChart"></canvas></div>
-      <div class="grid2" style="margin-top:18px;">
-        <div>
-          <div class="card-subtitle" style="margin-bottom:8px;">Largest active positions</div>
-          <div class="table-scroll">
-            <table class="data-table" id="activeShareTable">
-              <thead><tr>
-                <th>Share</th>
-                <th style="text-align:right;">Fund</th>
-                <th style="text-align:right;">Index</th>
-                <th style="text-align:right;">Active</th>
-              </tr></thead>
-              <tbody></tbody>
-            </table>
+      <div class="flow-step">
+        <div class="step-head">
+          <span class="step-num">1</span>
+          <div>
+            <div class="step-title">How far the fund sits from the index</div>
+            <div class="step-sub" id="activeShareHeadlineSub">The latest reading, and every month measured so far</div>
           </div>
         </div>
-        <div>
-          <div class="card-subtitle" style="margin-bottom:8px;">By month</div>
-          <div class="table-scroll">
-            <table class="data-table" id="activeShareMonths">
-              <thead><tr>
-                <th>Month</th>
-                <th style="text-align:right;">Active share</th>
-                <th>Dates</th>
-              </tr></thead>
-              <tbody></tbody>
-            </table>
+        <!-- three tiles, or four when a future is spread across the index, so the row fits itself
+             to what it is given rather than leaving the fourth stranded on a line of its own -->
+        <div class="kpi-row" id="activeShareKpis" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));"></div>
+        <div id="activeShareWarnings"></div>
+        <div class="chart-wrap" style="height:240px;"><canvas id="activeShareChart"></canvas></div>
+      </div>
+
+      <div class="flow-step">
+        <div class="step-head">
+          <span class="step-num">2</span>
+          <div>
+            <div class="step-title">Where the difference comes from</div>
+            <div class="step-sub" id="activeSharePositionsSub">The widest gaps between the fund and the index</div>
           </div>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table" id="activeShareTable">
+            <thead><tr>
+              <th>Share</th>
+              <th style="text-align:right;">Fund</th>
+              <th style="text-align:right;">Index</th>
+              <th style="text-align:right;">Active</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="step-head">
+          <span class="step-num">3</span>
+          <div>
+            <div class="step-title">Month by month</div>
+            <div class="step-sub">The series on the chart above, with the date each portfolio was cut</div>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table" id="activeShareMonths">
+            <thead><tr>
+              <th>Month</th>
+              <th style="text-align:right;">Active share</th>
+              <th>Dates</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
         </div>
       </div>
     </div>
   </div>
 
-  <div id="tradeActivityCard" data-tab="trades" class="card" style="display:none;">
+  <div id="tradesTabCard" data-tab="trades" class="card" style="display:none;">
     <div class="card-head">
       <div>
-        <div class="card-title">Trading Activity</div>
-        <div class="card-subtitle" id="tradeActivitySubtitle">Buys and sells by month</div>
+        <div class="card-title">Trades</div>
+        <div class="card-subtitle" id="tradesTabSubtitle">How much was traded, what was traded most, and every record behind it</div>
       </div>
-      <div class="funds-controls">
+    </div>
+
+    <div id="tradeActivityCard" class="flow-step" style="display:none;">
+      <div class="step-head">
+        <span class="step-num">1</span>
+        <div>
+          <div class="step-title">How much was traded</div>
+          <div class="step-sub" id="tradeActivitySubtitle">Buys and sells by month</div>
+        </div>
+        <div style="flex:1 1 auto;"></div>
         <label class="inline-check"><input type="checkbox" id="tradeShowAllClasses"> Include cash &amp; money market</label>
       </div>
-    </div>
-    <div class="chart-wrap" style="height:300px;"><canvas id="tradeActivityChart"></canvas></div>
-    <div class="table-scroll" style="margin-top:18px;">
-      <table class="data-table" id="tradeActivityTable">
-        <thead></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div id="topTradesCard" data-tab="trades" class="card" style="display:none;">
-    <div class="card-head">
-      <div>
-        <div class="card-title">Top Buys &amp; Sells</div>
-        <div class="card-subtitle" id="topTradesSubtitle">The shares traded most, or least, over the months picked</div>
+      <div class="chart-wrap" style="height:300px;"><canvas id="tradeActivityChart"></canvas></div>
+      <div class="table-scroll" style="margin-top:18px;">
+        <table class="data-table" id="tradeActivityTable">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
       </div>
-      <div class="funds-controls">
-        <select id="topTradesFund"></select>
-        <select id="topTradesFrom" title="From month"></select>
-        <span class="card-subtitle">to</span>
-        <select id="topTradesTo" title="To month"></select>
-        <select id="topTradesClass" title="Asset class"></select>
-        <div class="seg" id="topTradesOrder">
-          <button class="active" data-val="top">Largest</button>
-          <button data-val="bottom">Smallest</button>
-          <button data-val="net" title="Net traded value per share, for shares held at both ends of the period — the commentary pack's up and down weights">Up / down weights</button>
+    </div>
+
+    <div id="topTradesCard" class="flow-step" style="display:none;">
+      <div class="step-head">
+        <span class="step-num">2</span>
+        <div>
+          <div class="step-title">What was traded most</div>
+          <div class="step-sub" id="topTradesSubtitle">The shares traded most, or least, over the months picked</div>
         </div>
-        <label class="inline-check" for="topTradesDerivatives"
-               title="Index futures and options. Their rolls are large and would fill the list.">
-          <input type="checkbox" id="topTradesDerivatives"> Include derivatives
+        <div style="flex:1 1 auto;"></div>
+        <div class="funds-controls">
+          <select id="topTradesFund"></select>
+          <select id="topTradesFrom" title="From month"></select>
+          <span class="card-subtitle">to</span>
+          <select id="topTradesTo" title="To month"></select>
+          <select id="topTradesClass" title="Asset class"></select>
+          <div class="seg" id="topTradesOrder">
+            <button class="active" data-val="top">Largest</button>
+            <button data-val="bottom">Smallest</button>
+            <button data-val="net" title="Net traded value per share, for shares held at both ends of the period &mdash; the commentary pack's up and down weights">Up / down weights</button>
+          </div>
+          <label class="inline-check" for="topTradesDerivatives"
+                 title="Index futures and options. Their rolls are large and would fill the list.">
+            <input type="checkbox" id="topTradesDerivatives"> Include derivatives
+          </label>
+        </div>
+      </div>
+      <div id="topTradesEmpty" class="empty-hint" style="padding:24px 20px; display:none;"></div>
+      <div id="topTradesBody">
+        <!-- one axis, buys right and sells left, so the two sides are read against each other
+             rather than as two lists that happen to sit side by side -->
+        <div class="chart-wrap" id="topTradesChartWrap" style="height:320px; margin-bottom:18px;">
+          <canvas id="topTradesChart"></canvas>
+        </div>
+        <div class="grid2">
+          <div>
+            <div class="card-subtitle" style="margin-bottom:8px;" id="topBuysLabel">Buys</div>
+            <div class="table-scroll">
+              <table class="data-table" id="topBuysTable"><thead></thead><tbody></tbody></table>
+            </div>
+          </div>
+          <div>
+            <div class="card-subtitle" style="margin-bottom:8px;" id="topSellsLabel">Sells</div>
+            <div class="table-scroll">
+              <table class="data-table" id="topSellsTable"><thead></thead><tbody></tbody></table>
+            </div>
+          </div>
+        </div>
+        <div class="card-subtitle" id="topTradesNote" style="margin-top:10px;"></div>
+      </div>
+    </div>
+
+    <div id="tradesCard" class="flow-step" style="display:none;">
+      <div class="step-head">
+        <span class="step-num">3</span>
+        <div>
+          <div class="step-title">The records behind it</div>
+          <div class="step-sub" id="tradesSubtitle">All buy and sell activity</div>
+        </div>
+      </div>
+      <div class="filter-row">
+        <div class="seg" id="tradeTypeSeg">
+          <button class="active" data-val="all">All</button>
+          <button data-val="buy">Buys</button>
+          <button data-val="sell">Sells</button>
+        </div>
+        <input type="text" id="tradeSearch" placeholder="Search security&hellip;">
+        <input type="date" id="tradeFrom" title="From date">
+        <input type="date" id="tradeTo" title="To date">
+        <select id="tradeSourceFilter" style="display:none;"></select>
+        <label class="inline-check" for="tradeOnlyTrades"
+               title="Buys and sells only. Hides expenses, accruals, dividends, coupons, interest, revaluations, maturities and corporate actions.">
+          <input type="checkbox" id="tradeOnlyTrades" checked> Trades only
         </label>
+        <label class="inline-check" for="tradeExcludeDerivatives"
+               title="Futures, options and margin calls. Untick to see them in the blotter.">
+          <input type="checkbox" id="tradeExcludeDerivatives" checked> Exclude derivatives
+        </label>
+        <div class="spacer"></div>
+        <span class="card-subtitle" id="tradeCount"></span>
       </div>
-    </div>
-    <div id="topTradesEmpty" class="empty-hint" style="padding:24px 20px; display:none;"></div>
-    <div id="topTradesBody">
-      <!-- one axis, buys right and sells left, so the two sides are read against each other
-           rather than as two lists that happen to sit side by side -->
-      <div class="chart-wrap" id="topTradesChartWrap" style="height:320px; margin-bottom:18px;">
-        <canvas id="topTradesChart"></canvas>
+      <div class="table-scroll">
+        <table class="data-table" id="tradesTable">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
       </div>
-      <div class="grid2">
-        <div>
-          <div class="card-subtitle" style="margin-bottom:8px;" id="topBuysLabel">Buys</div>
-          <div class="table-scroll">
-            <table class="data-table" id="topBuysTable"><thead></thead><tbody></tbody></table>
-          </div>
-        </div>
-        <div>
-          <div class="card-subtitle" style="margin-bottom:8px;" id="topSellsLabel">Sells</div>
-          <div class="table-scroll">
-            <table class="data-table" id="topSellsTable"><thead></thead><tbody></tbody></table>
-          </div>
-        </div>
-      </div>
-      <div class="card-subtitle" id="topTradesNote" style="margin-top:10px;"></div>
-    </div>
-  </div>
-
-  <div id="tradesCard" data-tab="trades" class="card" style="display:none;">
-    <div class="card-head">
-      <div>
-        <div class="card-title">Trade Records</div>
-        <div class="card-subtitle" id="tradesSubtitle">All buy and sell activity</div>
-      </div>
-    </div>
-    <div class="filter-row">
-      <div class="seg" id="tradeTypeSeg">
-        <button class="active" data-val="all">All</button>
-        <button data-val="buy">Buys</button>
-        <button data-val="sell">Sells</button>
-      </div>
-      <input type="text" id="tradeSearch" placeholder="Search security…">
-      <input type="date" id="tradeFrom" title="From date">
-      <input type="date" id="tradeTo" title="To date">
-      <select id="tradeSourceFilter" style="display:none;"></select>
-      <label class="inline-check" for="tradeOnlyTrades"
-             title="Buys and sells only. Hides expenses, accruals, dividends, coupons, interest, revaluations, maturities and corporate actions.">
-        <input type="checkbox" id="tradeOnlyTrades" checked> Trades only
-      </label>
-      <label class="inline-check" for="tradeExcludeDerivatives"
-             title="Futures, options and margin calls. Untick to see them in the blotter.">
-        <input type="checkbox" id="tradeExcludeDerivatives" checked> Exclude derivatives
-      </label>
-      <div class="spacer"></div>
-      <span class="card-subtitle" id="tradeCount"></span>
-    </div>
-    <div class="table-scroll">
-      <table class="data-table" id="tradesTable">
-        <thead></thead>
-        <tbody></tbody>
-      </table>
     </div>
   </div>
 
@@ -681,6 +716,6 @@
 <script src="js/activeshare.js?v=bafc9435"></script>
 <script src="js/charts.js?v=1daaa1e9"></script>
 <script src="js/tabs.js?v=e9c7517f"></script>
-<script src="js/app.js?v=6acb92fe"></script>
+<script src="js/app.js?v=158c0f3c"></script>
 </body>
 </html>
