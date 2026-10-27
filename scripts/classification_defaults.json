@@ -38,6 +38,7 @@
     "BUYFUT": "Buy",
     "SELLFUT": "Sell",
     "Futures Purchase": "Buy",
+    "Futures Sale": "Sell",
     "OPCCT": "Ignore",
     "OPLFUT": "Buy",
     "CLLFUT": "Sell",
@@ -74,6 +75,7 @@
     "APPRO": "Ignore",
     "EXPRO": "Ignore",
     "MGROUT": "Ignore",
+    "MGRIN": "Ignore",
     "CDN": "Ignore",
     "CBUY": "Ignore",
     "CSELL": "Ignore",
@@ -101,6 +103,7 @@
     "MARGIN": "Cash",
     "IDXFT": "Equity",
     "FT": "Equity",
-    "Futures Purchase": "Equity"
+    "Futures Purchase": "Equity",
+    "Futures Sale": "Equity"
   }
 }

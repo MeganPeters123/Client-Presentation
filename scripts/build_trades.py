@@ -244,7 +244,19 @@ def write_into_history(summary, by_security, history_path):
             line["derivative"] = True
         entry.setdefault("bySecurity", []).append(line)
 
-    data["trades"] = trades
+    # Merge by month, rather than replacing the lot. A run scoped with --from/--to only
+    # builds the months asked for, so assigning the whole key would delete every other month
+    # that had been built before - which is exactly what a single-month top-up is.
+    existing = data.get("trades") or {}
+    replaced = sorted(set(existing) & set(trades))
+    existing.update(trades)
+    data["trades"] = existing
+    if replaced:
+        print()
+        print(f"   Rebuilt {len(replaced)} existing month(s): {', '.join(replaced)}")
+    kept = sorted(set(existing) - set(trades))
+    if kept:
+        print(f"   Left untouched: {len(kept)} other month(s) already in the file")
     data["tradesSavedAt"] = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     history_path.parent.mkdir(parents=True, exist_ok=True)
     with open(history_path, "w", encoding="utf-8") as fh:
