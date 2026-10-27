@@ -1429,6 +1429,9 @@ function renderBreakdownSection() {
   if (!bd) { card.style.display = "none"; return; }
 
   document.getElementById("breakdownKeyCol").textContent = breakdownBy === "ccy" ? "Currency" : "Sector";
+  document.getElementById("breakdownChartSub").textContent = breakdownBy === "ccy"
+    ? "Cash and fixed income on the left, the equity book opened out by trading currency on the right"
+    : "The equity book by GICS sector";
   document.getElementById("breakdownSubtitle").textContent =
     `${fund} — ${monthLabelFromKey(month)}, by ${breakdownBy === "ccy" ? "trading currency" : "GICS sector"}` +
     (expandFunds ? " (Global Equity Fund looked through)" : "");
@@ -1473,7 +1476,7 @@ function renderBreakdownSection() {
   // currency is the trading currency of the line, which is not the same thing as where the
   // business earns — say so, rather than letting the chart imply more than it knows
   document.getElementById("breakdownNote").textContent = breakdownBy === "ccy"
-    ? "Cash first, then the currency each equity position trades in. Cash is shown whole rather than by currency — the look-through card lists it line by line. For where the revenue is earned, see the look-through above."
+    ? "Cash first, then the currency each equity position trades in. Cash is shown whole rather than by currency — step 3 of the Allocation tab lists it line by line, which is also where to see what the revenue behind these positions is earned in."
     : (bd.unclassified.length
       ? `${bd.unclassified.length} position(s) have no sector yet — set them below.`
       : "Every equity position has a sector.");
