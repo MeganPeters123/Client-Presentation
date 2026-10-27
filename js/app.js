@@ -1446,7 +1446,8 @@ function renderBreakdownSection() {
     (expandFunds ? " (Global Equity Fund looked through)" : "");
 
   const colorFor = (k, i) => BREAKDOWN_MUTED[k] ||
-    (breakdownBy === "ccy" ? CURRENCY_COLORS[k] : null) || LOOKTHROUGH_COLORS[k] || PALETTE[i % PALETTE.length];
+    (breakdownBy === "ccy" ? CURRENCY_COLORS[k] : null) || LOOKTHROUGH_COLORS[k] ||
+    HOUSE_PALETTE[i % HOUSE_PALETTE.length];
   // Currency splits cash out of its own slice, so the two charts and the table all say the
   // same thing: one share of cash, and the rest broken down by where the equity trades.
   const splitCash = breakdownBy === "ccy";

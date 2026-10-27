@@ -294,7 +294,33 @@ function renderLookThroughChart(bars, order) {
 
 /* Rand exposure is the number Megan's audience looks for first, so ZAR keeps the SA green
    wherever it appears; everything else takes the standard palette in weight order. */
-const CURRENCY_COLORS = { ZAR: "#008300", USD: "#2a78d6", GBP: "#4a3aa7", EUR: "#eda100", HKD: "#eb6834" };
+/* The exposure pies in the same house colours as the allocation charts, so rand reads as
+ * the same navy on both tabs and the two views speak one language.
+ *
+ * Assigned in a fixed order by hue family rather than by size, so a currency keeps its
+ * colour as the book changes - a filter that drops a currency must not repaint the rest. */
+const CURRENCY_COLORS = {
+  ZAR: "#1b3864",   // the house navy, as SA equity on the allocation tab
+  GBP: "#177fa6",   // teal
+  EUR: "#c9b7ec",   // lilac
+  USD: "#92aecd",   // steel blue
+  HKD: "#ffc469",   // amber
+  MXN: "#8e74c4",   // deep lilac
+  SGD: "#7cc4dc",   // light teal
+  JPY: "#ad721c",   // deep amber
+  CHF: "#b6b6b8"    // grey
+};
+
+/* Sectors and any currency beyond the list above. Built from the house hue families -
+ * blue, purple, amber, grey - at steps far enough apart to stay separable, rather than
+ * reusing the deck's six fills, which sit too close to one another to carry eight slices.
+ *
+ * A donut sorts by size, so any two slices can end up neighbours. No eight-colour set
+ * passes that test; this one's worst pair is 8.7, against 7.1 for the brighter palette it
+ * replaces, so it reads slightly better as well as matching the deck. The 2px gap between
+ * slices and the table beside the chart are what carry identity where colour alone cannot. */
+const HOUSE_PALETTE = ["#143b76", "#19799d", "#85afdc", "#644395",
+                       "#c6b1f0", "#ad721c", "#f4c677", "#b7b7b9"];
 const BREAKDOWN_MUTED = { "Not classified": "#c3c2b7", "Cash & Fixed Income": "#898781", Unknown: "#c3c2b7",
                           Cash: "#898781", "Fixed Income": "#b4b1a6", "Not itemised in the export": "#dedbd2" };
 
@@ -446,7 +472,7 @@ function renderBreakdownChart(rows, by, labelTotal) {
         data: rows.map(r => r.weight),
         backgroundColor: rows.map((r, i) =>
           BREAKDOWN_MUTED[r.key] || (by === "ccy" ? CURRENCY_COLORS[r.key] : null) ||
-          LOOKTHROUGH_COLORS[r.key] || PALETTE[i % PALETTE.length]),
+          LOOKTHROUGH_COLORS[r.key] || HOUSE_PALETTE[i % HOUSE_PALETTE.length]),
         borderWidth: 0
       }]
     },
