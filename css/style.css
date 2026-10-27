@@ -231,6 +231,23 @@ table.data-table tr:hover td{ background:var(--surface-2); }
 .pie-col .legend{ display:block; margin-top:10px; }
 .pie-col .legend-item{ display:flex; align-items:center; gap:6px; font-size:11.5px; padding:1px 0; }
 .pie-col .legend-item .name{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* The allocation tab reads as one argument in three steps - what is held, where the revenue
+   is earned, what makes that up - so each step is numbered and separated rather than being a
+   second card with its own fund and period selectors to fall out of step with the first. */
+.flow-step{ padding-top:20px; margin-top:20px; border-top:1px solid var(--border); }
+.flow-step:first-of-type{ padding-top:4px; margin-top:4px; border-top:0; }
+.step-head{ display:flex; align-items:flex-start; gap:10px; margin-bottom:14px; }
+.step-num{ flex:0 0 auto; width:21px; height:21px; border-radius:50%; display:grid;
+  place-items:center; font-size:11.5px; font-weight:700; line-height:1;
+  background:var(--accent-wash); color:var(--accent); }
+.step-head > div:first-of-type{ flex:1 1 auto; min-width:0; }   /* shrink, never wrap off the number */
+.step-title{ font-size:13px; font-weight:650; }
+.step-sub{ font-size:11.5px; color:var(--ink-muted); margin-top:2px; line-height:1.45; }
+@media (max-width:640px){
+  .step-head{ flex-wrap:wrap; }
+  .step-head > div:first-of-type{ flex-basis:calc(100% - 31px); }
+}
+
 .pie-empty{ font-size:11.5px; color:var(--ink-muted); text-align:center; padding:60px 8px; }
 
 /* the pie of a pie gets its own height; .chart-wrap.donut would otherwise outrank a

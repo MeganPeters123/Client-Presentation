@@ -912,39 +912,48 @@ function renderAllocationSection() {
 
   renderPie("allocationChart", "allocationLegend", classRows, colorFor);
 
-  document.querySelector("#allocationTable tbody").innerHTML = classRows.map((x, i) => `
-    <tr>
-      <td><span class="legend-swatch" style="display:inline-block;background:${colorFor(x.key, i)};margin-right:7px;"></span>${x.key}</td>
-      <td class="num">${fmtCurrency(x.value)}</td>
-      <td class="num">${x.weight.toFixed(1)}%</td>
-    </tr>`).join("");
-
-  // The other two read position-level data, which only saved months carry, so they follow
-  // the same fund but fall back to the newest saved month on "Current Upload".
-  const month = positionMonth || listAllPeriodMonths()[0];
-  const expandFunds = document.getElementById("lookThroughExpand").value === "expand";
-  const oneFund = positionFund !== ALL_FUNDS;
+  // One table rather than two. The asset-class table and the look-through table carried the
+  // same categories in the same order, differing only in which column each one filled in, so
+  // a reader had to hold two tables together to compare them. The look-through column only
+  // appears once there is a revenue split to put in it.
   const counts = saIncCounts();
+  const hasLT = !!(ltAll && (counts.tickers || counts.manual));
+  // only consult the look-through for which rows exist when there is one; otherwise a
+  // category that only appears after the split (SA Inc) would show as a row of dashes
+  const ltBuckets = hasLT ? displayBuckets(ltAll.buckets) : null;
+  const weightOf = (o, k) => (o && o[k]) || 0;
+  const rowKeys = ALLOCATION_ORDER.filter(k =>
+    weightOf(listedShown, k) > 0.005 || weightOf(ltBuckets, k) > 0.005);
+  const keyed = Object.fromEntries(classRows.map(x => [x.key, x]));
+  const cell = v => (v > 0.005 ? v.toFixed(1) + "%" : "—");
+  const sumOf = o => ALLOCATION_ORDER.reduce((t, k) => t + weightOf(o, k), 0);
 
-  // 2. the same buckets the look-through card uses
-  const ltEmpty = document.getElementById("lookThroughPieEmpty");
-  const ltWrap = document.getElementById("lookThroughPie").parentElement;
-  const lt = (counts.tickers || counts.manual) ? ltAll : null;
-  if (lt) {
-    ltEmpty.style.display = "none";
-    ltWrap.style.display = "";
-    const shown = displayBuckets(lt.buckets);
-    renderPie("lookThroughPie", "lookThroughPieLegend",
-      ALLOCATION_ORDER.filter(k => (shown[k] || 0) > 0.005)
-        .map(k => ({ key: k, weight: shown[k] })), colorFor);
-    document.getElementById("lookThroughPieSub").textContent =
-      caption(`Where the revenue is earned · ${lt.coverage.toFixed(0)}% researched`);
-  } else {
-    ltEmpty.style.display = "";
-    ltWrap.style.display = "none";
-    document.getElementById("lookThroughPieLegend").innerHTML = "";
-  }
+  document.querySelector("#allocationTable thead").innerHTML = `
+    <tr><th>Category</th>
+      <th style="text-align:right;">Value</th>
+      <th style="text-align:right;" title="As classified on the custodian statement">As reported</th>
+      ${hasLT ? '<th style="text-align:right;" title="After splitting equity on where its revenue is earned">Look-through</th>' : ""}
+    </tr>`;
+  document.querySelector("#allocationTable tbody").innerHTML = rowKeys.map((k, i) => {
+    const row = keyed[k];
+    return `
+    <tr>
+      <td><span class="legend-swatch" style="display:inline-block;background:${colorFor(k, i)};margin-right:7px;"></span>${k}</td>
+      <td class="num">${row ? fmtCurrency(row.value) : "—"}</td>
+      <td class="num">${cell(weightOf(listedShown, k))}</td>
+      ${hasLT ? `<td class="num">${cell(weightOf(ltBuckets, k))}</td>` : ""}
+    </tr>`;
+  }).join("");
+  document.querySelector("#allocationTable tfoot").innerHTML = `
+    <tr><th>Total</th>
+      <th style="text-align:right;">${fmtCurrency(classRows.reduce((t, x) => t + x.value, 0))}</th>
+      <th style="text-align:right;">${sumOf(listedShown).toFixed(1)}%</th>
+      ${hasLT ? `<th style="text-align:right;">${sumOf(ltBuckets).toFixed(1)}%</th>` : ""}
+    </tr>`;
 
+  // The look-through used to repeat here as a second donut, beside the bar chart in step 2
+  // and the column in the table above - three drawings of one split. The bar stayed because
+  // it shows listed and looked-through side by side, which is the comparison being made.
   // Currency used to be a third pie here. It moved to Exposure Breakdown, which shows the
   // same split with cash separated out instead of folded in — two charts of one thing, one
   // of them less true, was worse than one.
@@ -956,10 +965,6 @@ function renderAllocationSection() {
     document.getElementById("allocationFund"), document.getElementById("allocationPeriod")));
 });
 
-["lookThroughFund", "lookThroughPeriod"].forEach(id => {
-  document.getElementById(id).addEventListener("change", () => onPositionSelectionChange(
-    document.getElementById("lookThroughFund"), document.getElementById("lookThroughPeriod")));
-});
 document.getElementById("lookThroughExpand").addEventListener("change", () => {
   // the allocation pies and the breakdown read this setting; the holdings lists have their own
   renderAllocationSection();
@@ -968,20 +973,21 @@ document.getElementById("lookThroughExpand").addEventListener("change", () => {
 // the breakdown card reads the same in-house fund setting, so it has to follow it
 document.getElementById("lookThroughExpand").addEventListener("change", renderBreakdownSection);
 
+/** Steps 2 and 3 of the allocation card. The card itself is shown or hidden by
+ *  renderAllocationSection, which owns the fund and period selectors both steps read, so
+ *  this one only decides whether the look-through part of it has anything to say. */
 function renderLookThroughSection() {
-  const card = document.getElementById("lookThroughCard");
   const empty = document.getElementById("lookThroughEmpty");
   const body = document.getElementById("lookThroughBody");
+  const hide = () => { empty.style.display = "none"; body.style.display = "none"; };
   const funds = listFundsWithHoldings();
-  if (!funds.length) { card.style.display = "none"; return; }
-  card.style.display = "block";
+  if (!funds.length) { hide(); return; }
 
-  const fundSel = document.getElementById("lookThroughFund");
-  const perSel = document.getElementById("lookThroughPeriod");
-  const { fund, month } = syncPositionSelectors(fundSel, perSel);
+  const fund = positionFund;
+  const month = positionMonth;
 
   if (!saIncCounts().tickers && !saIncCounts().manual) {
-    empty.textContent = "Load the SA Revenue Split workbook above to build the look-through.";
+    empty.textContent = "Load the SA Revenue Split workbook on the Data tab to build the look-through.";
     empty.style.display = "block"; body.style.display = "none";
     return;
   }
@@ -996,11 +1002,13 @@ function renderLookThroughSection() {
   const lt = fund === ALL_FUNDS
     ? computeLookThroughConsolidated(month, { expandFunds })
     : computeLookThrough(fund, month, { expandFunds });
-  if (!lt) { card.style.display = "none"; return; }
+  if (!lt) { hide(); return; }
   const listed = lt.listed;
 
+  // the fund and the month are named once, in the card head, so this says only what is new
   document.getElementById("lookThroughSubtitle").textContent =
-    `${fund} — ${monthLabelFromKey(month)} · ${lt.coverage.toFixed(0)}% of equity has a researched revenue split`;
+    `Equity split by where the revenue is earned, not where the share is listed · `
+    + `${lt.coverage.toFixed(0)}% of equity has a researched split`;
 
   const shownListed = displayBuckets(listed, LISTED_DISPLAY);
   const shownLT = displayBuckets(lt.buckets);
@@ -1008,23 +1016,6 @@ function renderLookThroughSection() {
     [{ label: "Listed", buckets: shownListed }, { label: "Look-through", buckets: shownLT }],
     ALLOCATION_ORDER
   );
-
-  // one row per category on either side, so a bucket that only exists after the look-through
-  // (Global Equity) still lines up against the listed column it came out of
-  const rowKeys = ALLOCATION_ORDER
-    .filter(k => (shownListed[k] || 0) > 0.005 || (shownLT[k] || 0) > 0.005);
-  const cell = v => (v > 0.005 ? v.toFixed(1) + "%" : "—");
-  document.querySelector("#lookThroughTable tbody").innerHTML = rowKeys.map((k, i) => `
-    <tr>
-      <td><span class="legend-swatch" style="display:inline-block;background:${LOOKTHROUGH_COLORS[k] || colorForCategory(k, i)};margin-right:7px;"></span>${k}</td>
-      <td class="num">${cell(shownListed[k] || 0)}</td>
-      <td class="num">${cell(shownLT[k] || 0)}</td>
-    </tr>`).join("");
-  const sum = o => Object.values(o).reduce((s, v) => s + v, 0);
-  document.querySelector("#lookThroughTable tfoot").innerHTML = `
-    <tr><th>Total</th>
-      <th style="text-align:right;">${sum(shownListed).toFixed(1)}%</th>
-      <th style="text-align:right;">${sum(shownLT).toFixed(1)}%</th></tr>`;
 
   const note = document.getElementById("lookThroughExpandedNote");
   const parts = [];

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aylett & Co — AUM Dashboard</title>
-<link rel="stylesheet" href="css/style.css?v=47a1283a">
+<link rel="stylesheet" href="css/style.css?v=b1d63783">
 </head>
 <body>
 
@@ -208,42 +208,6 @@
       <div class="funds-controls">
         <select id="allocationFund"></select>
         <select id="allocationPeriod"></select>
-      </div>
-    </div>
-    <div class="pie-row">
-      <div class="pie-col">
-        <div class="pie-title">By asset class</div>
-        <div class="pie-sub" id="assetClassPieSub">As the custodian reports it — local versus offshore</div>
-        <div class="chart-wrap donut"><canvas id="allocationChart"></canvas></div>
-        <div class="legend" id="allocationLegend"></div>
-      </div>
-      <div class="pie-col">
-        <div class="pie-title">Look-through</div>
-        <div class="pie-sub" id="lookThroughPieSub">Split by where the revenue is earned</div>
-        <div class="chart-wrap donut"><canvas id="lookThroughPie"></canvas></div>
-        <div class="legend" id="lookThroughPieLegend"></div>
-        <div class="pie-empty" id="lookThroughPieEmpty" style="display:none;">
-          Load the SA Revenue Split workbook to show this.
-        </div>
-      </div>
-    </div>
-    <div class="table-scroll" style="margin-top:18px;">
-      <table class="data-table" id="allocationTable">
-        <thead><tr><th>Category</th><th style="text-align:right;">Value</th><th style="text-align:right;">% of Total</th></tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div id="lookThroughCard" data-tab="allocation" class="card" style="display:none;">
-    <div class="card-head">
-      <div>
-        <div class="card-title">Asset Allocation — Look-Through</div>
-        <div class="card-subtitle" id="lookThroughSubtitle">Equity split by where the revenue is earned, not where the share is listed</div>
-      </div>
-      <div class="funds-controls">
-        <select id="lookThroughFund"></select>
-        <select id="lookThroughPeriod"></select>
         <label class="inline-check" for="lookThroughExpand">Global Equity Fund</label>
         <select id="lookThroughExpand" title="How a holding in the Global Equity Fund is treated">
           <option value="expand" selected>looked through to holdings</option>
@@ -251,66 +215,87 @@
         </select>
       </div>
     </div>
-    <div id="lookThroughEmpty" class="empty-hint" style="padding:24px 20px;">
-      Load the SA Revenue Split workbook above to build the look-through.
-    </div>
-    <div id="lookThroughBody" style="display:none;">
-      <div class="chart-wrap" style="height:380px;"><canvas id="lookThroughChart"></canvas></div>
-      <div class="grid2" style="margin-top:18px;">
+
+    <div class="flow-step">
+      <div class="step-head">
+        <span class="step-num">1</span>
         <div>
-          <div class="table-scroll">
-            <table class="data-table" id="lookThroughTable">
-              <thead><tr>
-                <th>Category</th>
-                <th style="text-align:right;" title="As classified on the custodian statement">Listed</th>
-                <th style="text-align:right;">Look-through</th>
-              </tr></thead>
-              <tbody></tbody>
-              <tfoot></tfoot>
-            </table>
-          </div>
-          <div class="card-subtitle" id="lookThroughExpandedNote" style="margin-top:10px;"></div>
+          <div class="step-title">What the fund holds</div>
+          <div class="step-sub" id="assetClassPieSub">As the custodian reports it &mdash; local versus offshore</div>
         </div>
-        <div>
-          <div class="funds-controls" style="margin-bottom:8px;">
-            <span class="card-subtitle" id="positionsTitle">Equity positions</span>
-            <div style="flex:1 1 auto;"></div>
-            <label class="inline-check" for="positionsOnlyUnset">
-              <input type="checkbox" id="positionsOnlyUnset"> Only those needing a split
-            </label>
+      </div>
+      <div class="grid2">
+        <div class="chart-wrap donut"><canvas id="allocationChart"></canvas></div>
+        <div class="table-scroll">
+          <table class="data-table" id="allocationTable">
+            <thead></thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="lookThroughEmpty" class="empty-hint" style="padding:24px 20px;">
+      Load the SA Revenue Split workbook on the Data tab to build the look-through.
+    </div>
+
+    <div id="lookThroughBody" style="display:none;">
+      <div class="flow-step">
+        <div class="step-head">
+          <span class="step-num">2</span>
+          <div>
+            <div class="step-title">Where the revenue is earned</div>
+            <div class="step-sub" id="lookThroughSubtitle">Equity split by where the revenue is earned, not where the share is listed</div>
           </div>
-          <div class="table-scroll">
-            <table class="data-table" id="positionsTable">
+        </div>
+        <div class="chart-wrap" style="height:380px;"><canvas id="lookThroughChart"></canvas></div>
+        <div class="card-subtitle" id="lookThroughExpandedNote" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="flow-step">
+        <div class="step-head">
+          <span class="step-num">3</span>
+          <div>
+            <div class="step-title">What makes up those figures</div>
+            <div class="step-sub" id="positionsTitle">Equity positions</div>
+          </div>
+          <div style="flex:1 1 auto;"></div>
+          <label class="inline-check" for="positionsOnlyUnset">
+            <input type="checkbox" id="positionsOnlyUnset"> Only those needing a split
+          </label>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table" id="positionsTable">
+            <thead><tr>
+              <th>Holding</th>
+              <th style="text-align:right;" data-sort="weight" title="Click to sort">Weight<span class="sort-ind"></span></th>
+              <th style="text-align:right;" title="Share of revenue earned in South Africa">% SA rev</th>
+              <th style="text-align:right;" data-sort="saInc" title="Weight × SA revenue share — what this holding contributes to the SA Inc figure on the chart. Click to sort">SA Inc<span class="sort-ind"></span></th>
+              <th style="text-align:right;" data-sort="global" title="Weight × the rest — what this holding contributes to the Global Equity figure on the chart. Click to sort">Global Eq<span class="sort-ind"></span></th>
+              <th style="text-align:right;" title="Where this counts as listed — defaults to the trading currency">Listed</th>
+            </tr></thead>
+            <tbody></tbody>
+            <tfoot></tfoot>
+          </table>
+        </div>
+        <div class="card-subtitle" style="margin-top:8px;">
+          Anything you set here is your own call &mdash; saved in this browser, and it overrides the workbook.
+        </div>
+
+        <div id="cashBreakdown" style="display:none; margin-top:18px;">
+          <div class="card-subtitle" id="cashBreakdownTitle" style="font-weight:650;"></div>
+          <div class="table-scroll" style="margin-top:6px;">
+            <table class="data-table" id="cashTable">
               <thead><tr>
                 <th>Holding</th>
-                <th style="text-align:right;" data-sort="weight" title="Click to sort">Weight<span class="sort-ind"></span></th>
-                <th style="text-align:right;" title="Share of revenue earned in South Africa">% SA rev</th>
-                <th style="text-align:right;" data-sort="saInc" title="Weight × SA revenue share — what this holding contributes to the SA Inc figure on the chart. Click to sort">SA Inc<span class="sort-ind"></span></th>
-                <th style="text-align:right;" data-sort="global" title="Weight × the rest — what this holding contributes to the Global Equity figure on the chart. Click to sort">Global Eq<span class="sort-ind"></span></th>
-                <th style="text-align:right;" title="Where this counts as listed — defaults to the trading currency">Listed</th>
+                <th style="text-align:right;">Ccy</th>
+                <th style="text-align:right;">SA Cash</th>
+                <th style="text-align:right;">Global Cash</th>
               </tr></thead>
               <tbody></tbody>
               <tfoot></tfoot>
             </table>
-          </div>
-          <div class="card-subtitle" style="margin-top:8px;">
-            Anything you set here is your own call — saved in this browser, and it overrides the workbook.
-          </div>
-
-          <div id="cashBreakdown" style="display:none; margin-top:18px;">
-            <div class="card-subtitle" id="cashBreakdownTitle" style="font-weight:650;"></div>
-            <div class="table-scroll" style="margin-top:6px;">
-              <table class="data-table" id="cashTable">
-                <thead><tr>
-                  <th>Holding</th>
-                  <th style="text-align:right;">Ccy</th>
-                  <th style="text-align:right;">SA Cash</th>
-                  <th style="text-align:right;">Global Cash</th>
-                </tr></thead>
-                <tbody></tbody>
-                <tfoot></tfoot>
-              </table>
-            </div>
           </div>
         </div>
       </div>
@@ -659,6 +644,6 @@
 <script src="js/activeshare.js?v=bafc9435"></script>
 <script src="js/charts.js?v=1daaa1e9"></script>
 <script src="js/tabs.js?v=74ed04a5"></script>
-<script src="js/app.js?v=bb20b0a2"></script>
+<script src="js/app.js?v=1e22d592"></script>
 </body>
 </html>
