@@ -81,12 +81,38 @@ const ISSUER_ALIASES = {
  *  letters and nothing else. */
 const ISSUER_PRIMARIES = new Set(Object.values(ISSUER_ALIASES));
 
-function resolveIssuer(ticker) {
+function resolveIssuer(ticker, name) {
   const raw = rawTicker(ticker);
   const stem = normTicker(raw);
+  // a company that changed ticker counts under the surviving code, so a ticker change does
+  // not split one holding into two. Name-aware, because the old code may since have been
+  // taken by someone else — AMS was Anglo American Platinum and is now Amadeus.
+  if (typeof resolveRenamedIssuer === "function") {
+    const r = resolveRenamedIssuer(stem, name);
+    if (r.renamed) return r.stem;
+  }
   const alias = ISSUER_ALIASES[raw] || ISSUER_ALIASES[stem];
   if (alias) return alias;
   return ISSUER_PRIMARIES.has(stem) ? stem : null;
+}
+
+/** The same rename applied to an index's own constituent list, which is keyed on the raw
+ *  code the weights file carries and so would otherwise still call Valterra AMS for the
+ *  months before the change — leaving the fund and the index unable to see each other and
+ *  overstating active share by the position twice over.
+ *
+ *  These are JSE indices, so a bare code here needs no name to disambiguate it: Amadeus is
+ *  Madrid-listed and is never a constituent. */
+function renameIndexConstituents(weights, month) {
+  let out = weights;
+  RENAMED_ISSUERS.forEach(r => {
+    if (!r.until || month >= r.until) return;
+    if (!Object.prototype.hasOwnProperty.call(out, r.stem)) return;
+    if (out === weights) out = { ...weights };
+    out[r.becomes] = (out[r.becomes] || 0) + out[r.stem];
+    delete out[r.stem];
+  });
+  return out;
 }
 
 /* Which index each contract tracks. DCAP is the capped-SWIX top 40, which is the index the
@@ -216,7 +242,10 @@ function listIndexCodes(month) {
 
 function indexInfo(month, code) {
   const m = indexWeightsStore.months[month];
-  return (m && m.indices[code]) || null;
+  const idx = (m && m.indices[code]) || null;
+  if (!idx) return null;
+  const weights = renameIndexConstituents(idx.weights, month);
+  return weights === idx.weights ? idx : { ...idx, weights };
 }
 
 /** Which index a futures line tracks, from its contract name. */
@@ -287,7 +316,7 @@ function fundEquityExposure(fund, month) {
         if (sub && sub.holdings) { walk(sub.holdings, scale * (h.pct || 0) / 100); return; }
       }
       // one leg of a dual listing counts under its issuer, wherever it happens to trade
-      const issuer = resolveIssuer(h.ticker);
+      const issuer = resolveIssuer(h.ticker, h.name);
       if (issuer) {
         sa.set(issuer, (sa.get(issuer) || 0) + rand);
         const seen = consolidated.find(c => c.ticker === rawTicker(h.ticker));

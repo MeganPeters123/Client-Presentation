@@ -885,7 +885,7 @@ const ISSUER_NOISE = new Set(["LTD", "LIMITED", "PLC", "INC", "CORP", "CORPORATI
  *  January 2025 and as VAL from June 2025, and AMS SQ is now Amadeus - so without this,
  *  AMS is a code shared by two companies and matching on it is refused for both. */
 const RENAMED_ISSUERS = [
-  { stem: "AMS", issuer: "ANGLO", becomes: "VAL", named: "VALTERRA" }
+  { stem: "AMS", issuer: "ANGLO", becomes: "VAL", named: "VALTERRA", until: "2025-06" }
 ];
 
 /** The code and issuer a holding should be read as, after any rename is applied. */

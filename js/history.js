@@ -185,7 +185,7 @@ function listHoldingMonthsForFund(fund) {
  *
  *  resolveIssuer lives in activeshare.js, which loads after this file. */
 function holdingKey(h) {
-  const issuer = typeof resolveIssuer === "function" ? resolveIssuer(h.ticker) : null;
+  const issuer = typeof resolveIssuer === "function" ? resolveIssuer(h.ticker, h.name) : null;
   if (issuer) return issuer;
   return (h.ticker || h.name || "").trim().toUpperCase();
 }
@@ -212,7 +212,7 @@ function displayName(h) {
 
 /** True for the secondary leg of a dual listing — the one that keys under another code. */
 function isSecondaryLeg(h) {
-  return typeof resolveIssuer === "function" && !!resolveIssuer(h.ticker);
+  return typeof resolveIssuer === "function" && !!resolveIssuer(h.ticker, h.name);
 }
 
 /** Cash, call accounts, money-market funds and fee accruals aren't "holdings" for a
