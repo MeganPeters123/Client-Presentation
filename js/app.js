@@ -1582,6 +1582,11 @@ function renderHoldingsSections() {
     + (document.getElementById("holdingsNamesOnly").checked ? " · ten largest, listed A–Z" : "");
   document.getElementById("topColB").textContent = monthLabelFromKey(current);
   document.getElementById("topColA").textContent = monthLabelFromKey(prior);
+  document.getElementById("topHoldingsSub").textContent =
+    document.getElementById("holdingsNamesOnly").checked
+      ? "Listed A to Z, weights withheld"
+      : samePeriod ? "Each position's weight at that date"
+                   : "Each position's weight now and at the comparison date";
 
   // Names only: still the ten largest, but listed A to Z with the weights off — a slide
   // that says what the fund owns without saying how much of each. Sorting by size and then
@@ -1633,11 +1638,12 @@ function renderPortfolioChanges(fund, current, prior) {
   };
   const hidden = (all.entries.length - shown.entries.length) + (all.exits.length - shown.exits.length);
 
+  // The fund, both dates and the two tick boxes are named once in the card head and apply to
+  // the whole tab, so this line carries only what belongs to this step. Anything the
+  // threshold removes is still said explicitly, so a filtered-out position is never
+  // silently missing.
   document.getElementById("portfolioChangesSubtitle").textContent =
-    `${fund} — opened and closed between ${monthLabelFromKey(prior)} and ${monthLabelFromKey(current)}` +
-    (excludeBonds ? " · equities only" : "") +
-    (expandFunds ? " · Global Equity Fund looked through" : "") +
-    // say so explicitly, so a filtered-out position is never silently missing
+    "Positions opened and closed" +
     (hidden ? ` · ${hidden} below ${threshold}% hidden` : "");
 
   // sub-0.1% moves are the reason the cut-off exists — give them enough precision to judge,

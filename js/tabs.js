@@ -9,7 +9,7 @@
  */
 
 const TAB_STORAGE_KEY = "aum-dashboard-tab";
-const TAB_NAMES = ["overview", "allocation", "holdings", "exposure", "activeshare", "trades", "data"];
+const TAB_NAMES = ["overview", "allocation", "exposure", "holdings", "activeshare", "trades", "data"];
 
 let activeTab = null;
 // Until someone clicks a tab, a first-time visitor starts on Data and is moved to Overview as
