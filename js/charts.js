@@ -180,40 +180,39 @@ function renderTradeActivityChart(activity, series) {
    language the allocation donut and the look-through bars both speak. The Quasi-Offshore and
    Offshore Equity keys are kept because the engine still computes them; the charts fold both
    into Global Equity, so they carry its colour. */
-/* Blue-led, because the allocation tab's story is equity: the SA block deep, the global
- * block light, so a bar reads as one family splitting rather than as unrelated colours.
+/* Aylett's own presentation palette, sampled from the deck's allocation chart rather than
+ * matched by eye: navy SA equity, grey global equity, steel-blue SA cash, teal SA fixed
+ * income, amber global cash, lilac SA property.
  *
- * Cash stays warm on purpose. Eight categories cannot all live in the blue arc and stay
- * apart: the dark-mode lightness band is only 0.19 wide, and every candidate searched
- * across blue -> teal -> violet collapsed one of the pairs that actually touch (azure
- * equity against a pale-blue cash fell to deltaE 5.3 under deuteranopia). Cash carries the
- * one warm family so every blue stays legible, and property keeps its teal.
+ * The deck shows six. The four here it does not are the look-through counterparts and the
+ * global halves of property and fixed income, so each takes its SA partner's slot or a
+ * clear step of the same hue: SA Inc is the SA equity navy and Global Equity the global
+ * grey, because the colour marks the block and the two bars show how it redistributes.
  *
- * Checked with the palette validator against the pairs that really do touch - computed from
- * the holdings rather than assumed, 14 of them across the 18 funds - in both modes. Each
- * clears normal-vision deltaE 15 and CVD deltaE 8.
- *
- * SA Inc shares the SA equity blue, as Global Equity already shares the global one: the
- * colour marks the block, and the two columns either side of it show how that block
- * redistributes. The row labels carry the rest. */
+ * These are house colours, so they are used as given. Two pairs sit closer than the chart
+ * standard wants - grey global equity against steel-blue SA cash (deltaE 6.4) and lilac
+ * property against the same cash (9.2). In the deck the navy block separates them; here the
+ * stacking order puts them together. Every segment is directly labelled and the table
+ * repeats the figures, and the stacked bars carry a 2px surface gap between segments, so
+ * identity never rests on the colour alone. */
 const LOOKTHROUGH_COLORS = {
-  "JSE-listed Equity": "#2e5eba",
-  "SA Equity": "#2e5eba",
-  "SA Inc": "#2e5eba",
-  "Global Equity": "#369ed6",
-  "Global-listed Equity": "#369ed6",
-  "Quasi-Offshore": "#369ed6",
-  "Offshore Equity": "#369ed6",
-  "JSE-listed Property": "#17796f",
-  "SA Property": "#17796f",
-  "Global-listed Property": "#63bdb2",
-  "Offshore Property": "#63bdb2",
-  "SA Cash": "#a9731a",
-  "Global Cash": "#edb13a",
-  "Offshore Cash": "#edb13a",
-  "SA Fixed Income": "#803e9b",
-  "Global Fixed Income": "#c872ad",
-  "Offshore Fixed Income": "#c872ad"
+  "JSE-listed Equity": "#1b3864",
+  "SA Equity": "#1b3864",
+  "SA Inc": "#1b3864",
+  "Global Equity": "#b6b6b8",
+  "Global-listed Equity": "#b6b6b8",
+  "Quasi-Offshore": "#b6b6b8",
+  "Offshore Equity": "#b6b6b8",
+  "JSE-listed Property": "#c9b7ec",
+  "SA Property": "#c9b7ec",
+  "Global-listed Property": "#8e74c4",
+  "Offshore Property": "#8e74c4",
+  "SA Cash": "#92aecd",
+  "Global Cash": "#ffc469",
+  "Offshore Cash": "#ffc469",
+  "SA Fixed Income": "#177fa6",
+  "Global Fixed Income": "#7cc4dc",
+  "Offshore Fixed Income": "#7cc4dc"
 };
 
 let lookThroughChartInstance = null;
@@ -266,7 +265,10 @@ function renderLookThroughChart(bars, order) {
     label: key,
     data: bars.map(b => b.buckets[key] || 0),
     backgroundColor: LOOKTHROUGH_COLORS[key] || PALETTE[i % PALETTE.length],
-    borderWidth: 0
+    // the gap is what keeps two close house colours apart where they touch
+    borderColor: cssVar("--surface"),
+    borderWidth: { top: 2, bottom: 2, left: 0, right: 0 },
+    borderSkipped: false
   })).filter(d => d.data.some(v => v > 0.005));
 
   lookThroughChartInstance = new Chart(ctx, {
@@ -520,7 +522,10 @@ function renderPie(canvasId, legendId, rows, colorFor, { minSlice = 0.5 } = {}) 
   pieInstances[canvasId] = new Chart(canvas.getContext("2d"), {
     type: "doughnut",
     data: { labels: shown.map(r => r.key),
-            datasets: [{ data: shown.map(r => r.weight), backgroundColor: colors, borderWidth: 0 }] },
+            // a surface-coloured gap between slices, so two close colours meeting on the
+            // ring still read as two slices
+            datasets: [{ data: shown.map(r => r.weight), backgroundColor: colors,
+                         borderColor: cssVar("--surface"), borderWidth: 2 }] },
     options: {
       responsive: true, maintainAspectRatio: false, cutout: "56%",
       plugins: {
