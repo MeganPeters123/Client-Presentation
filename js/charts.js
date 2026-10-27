@@ -215,6 +215,39 @@ const LOOKTHROUGH_COLORS = {
   "Offshore Fixed Income": "#7cc4dc"
 };
 
+/* The house palette is drawn for white slides, so its darkest steps all but vanish on the
+ * dark theme: the SA navy sits at 1.49:1 against the surface, the ramp's navy at 1.59 and
+ * its purple at 2.30, where a mark wants 3:1. Each gets a lighter step of its own hue here,
+ * chosen rather than computed from a flip, so the light theme keeps the deck's colours
+ * exactly and only the dark one moves.
+ *
+ * The navy is the compromise. Lifting it far enough to be read on black walks it toward
+ * the teal - 22.3 apart before, 8.6 after - and lifting it further turns it periwinkle and
+ * stops it being the house navy at all. It keeps 24 or more from grey, lilac and steel,
+ * which are the colours it actually sits beside, and the 2px gap, the segment labels and
+ * the table carry the one pair that is close. */
+const CHART_DARK = {
+  "#1b3864": "#2d66bd",   // SA equity navy      1.49:1 -> 3.11:1
+  "#143b76": "#2d66bd",   // ramp navy           1.59:1 -> 3.11:1
+  "#644395": "#9466d8"    // ramp purple         2.30:1 -> 4.27:1
+};
+
+/** True when the chart surface is the dark one. Read from the surface itself rather than
+ *  from a theme flag, so it follows whatever the stylesheet says. */
+function onDarkSurface() {
+  const m = String(cssVar("--surface") || "").match(/^#?([0-9a-fA-F]{6})$/);
+  if (!m) return false;
+  const n = parseInt(m[1], 16);
+  const lin = i => { const v = ((n >> i) & 255) / 255;
+    return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * lin(16) + 0.7152 * lin(8) + 0.0722 * lin(0) < 0.3;
+}
+
+/** A fill colour for the current theme. Safe to apply twice: a dark step is never a key. */
+function themed(hex) {
+  return onDarkSurface() ? (CHART_DARK[String(hex).toLowerCase()] || hex) : hex;
+}
+
 let lookThroughChartInstance = null;
 
 /** Two stacked bars — listed vs looked-through — so the reallocation is the story.
@@ -264,7 +297,7 @@ function renderLookThroughChart(bars, order) {
   const datasets = order.map((key, i) => ({
     label: key,
     data: bars.map(b => b.buckets[key] || 0),
-    backgroundColor: LOOKTHROUGH_COLORS[key] || PALETTE[i % PALETTE.length],
+    backgroundColor: themed(LOOKTHROUGH_COLORS[key] || PALETTE[i % PALETTE.length]),
     // the gap is what keeps two close house colours apart where they touch
     borderColor: cssVar("--surface"),
     borderWidth: { top: 2, bottom: 2, left: 0, right: 0 },
@@ -470,9 +503,9 @@ function renderBreakdownChart(rows, by, labelTotal) {
       labels: rows.map(r => r.key),
       datasets: [{
         data: rows.map(r => r.weight),
-        backgroundColor: rows.map((r, i) =>
+        backgroundColor: rows.map((r, i) => themed(
           BREAKDOWN_MUTED[r.key] || (by === "ccy" ? CURRENCY_COLORS[r.key] : null) ||
-          LOOKTHROUGH_COLORS[r.key] || HOUSE_PALETTE[i % HOUSE_PALETTE.length]),
+          LOOKTHROUGH_COLORS[r.key] || HOUSE_PALETTE[i % HOUSE_PALETTE.length])),
         borderWidth: 0
       }]
     },
@@ -543,7 +576,7 @@ function renderPie(canvasId, legendId, rows, colorFor, { minSlice = 0.5 } = {}) 
   const shown = small.length > 1
     ? [...big, { key: `Other (${small.length})`, weight: small.reduce((s, r) => s + r.weight, 0) }]
     : rows.filter(r => r.weight > 0);
-  const colors = shown.map((r, i) => (r.key.startsWith("Other (") ? cssVar("--ink-muted") : colorFor(r.key, i)));
+  const colors = shown.map((r, i) => themed(r.key.startsWith("Other (") ? cssVar("--ink-muted") : colorFor(r.key, i)));
 
   pieInstances[canvasId] = new Chart(canvas.getContext("2d"), {
     type: "doughnut",

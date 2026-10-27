@@ -81,8 +81,12 @@ function onPositionSelectionChange(fundSel, periodSel) {
     const next = cur === "dark" ? "light" : "dark";
     document.documentElement.setAttribute("data-theme", next);
     try { localStorage.setItem("aum-dashboard-theme", next); } catch (e) {}
-    if (state.aum.length) renderAumChart(state.aum);
-    if (state.allocation.length) renderAllocationChart(computeAllocationSegments(state.allocation));
+    // Every chart reads its ink, grid and surface colours from the stylesheet when it is
+    // built, and the fills pick their theme step the same way, so a chart drawn under the
+    // other theme keeps that theme's colours until it is drawn again. Only the two oldest
+    // charts were being redrawn here; the rest kept stale axes, stale slice gaps and - once
+    // the palette gained a dark step - stale fills.
+    renderAll();
   });
 })();
 
@@ -893,7 +897,7 @@ function renderAllocationSection() {
 
   document.getElementById("assetClassPieSub").textContent = caption("As the custodian reports it");
 
-  const colorFor = (k, i) => LOOKTHROUGH_COLORS[k] || CURRENCY_COLORS[k] || colorForCategory(k, i);
+  const colorFor = (k, i) => themed(LOOKTHROUGH_COLORS[k] || CURRENCY_COLORS[k] || colorForCategory(k, i));
 
   const expandFundsEarly = document.getElementById("lookThroughExpand").value === "expand";
   const ltAll = positionFund === ALL_FUNDS
@@ -1445,9 +1449,9 @@ function renderBreakdownSection() {
     `${fund} — ${monthLabelFromKey(month)}, by ${breakdownBy === "ccy" ? "trading currency" : "GICS sector"}` +
     (expandFunds ? " (Global Equity Fund looked through)" : "");
 
-  const colorFor = (k, i) => BREAKDOWN_MUTED[k] ||
+  const colorFor = (k, i) => themed(BREAKDOWN_MUTED[k] ||
     (breakdownBy === "ccy" ? CURRENCY_COLORS[k] : null) || LOOKTHROUGH_COLORS[k] ||
-    HOUSE_PALETTE[i % HOUSE_PALETTE.length];
+    HOUSE_PALETTE[i % HOUSE_PALETTE.length]);
   // Currency splits cash out of its own slice, so the two charts and the table all say the
   // same thing: one share of cash, and the rest broken down by where the equity trades.
   const splitCash = breakdownBy === "ccy";
