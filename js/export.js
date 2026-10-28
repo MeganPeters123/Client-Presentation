@@ -25,6 +25,43 @@ function exportableBlocks() {
   return blocks;
 }
 
+/** The nearest element that holds all of these. */
+function commonAncestor(nodes) {
+  return nodes.reduce((a, b) => {
+    if (!a) return b;
+    let up = a;
+    while (up && !up.contains(b)) up = up.parentElement;
+    return up;
+  }, null);
+}
+
+/** What a block can be exported as.
+ *
+ *  A step that holds a chart and a table is two things a slide might want, and gluing them
+ *  together means neither can be had on its own. Where both are present the table comes
+ *  first and is what a plain Copy gives you — Megan's call, 2026-10-28: the figures are what
+ *  goes on the slide, while the chart on screen is for reading the shape of them.
+ *
+ *  The table part is the <table> itself rather than its scrolling wrapper, so a table wider
+ *  than the window is captured whole instead of being cut off at the edge of the scroll box. */
+function blockParts(block) {
+  const whole = { key: "step", label: "Whole step", el: block };
+  const tables = Array.from(block.querySelectorAll("table"));
+  const canvases = Array.from(block.querySelectorAll("canvas"));
+  if (!tables.length || !canvases.length) return [whole];
+
+  const tableEl = tables.length === 1 ? tables[0] : commonAncestor(tables);
+  const chartEl = canvases.length === 1
+    ? (canvases[0].closest(".chart-wrap") || canvases[0])
+    : commonAncestor(canvases);
+
+  const parts = [];
+  if (tableEl && tableEl !== block) parts.push({ key: "table", label: "Table only", el: tableEl });
+  if (chartEl && chartEl !== block) parts.push({ key: "chart", label: "Chart only", el: chartEl });
+  parts.push(whole);
+  return parts.length > 1 ? parts : [whole];
+}
+
 function blockName(block) {
   const title = block.querySelector(".step-title, .card-title");
   const card = block.closest(".card");
@@ -38,7 +75,17 @@ function slug(s) {
   return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 70);
 }
 
-const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+/** Wait for the browser to have laid things out again.
+ *
+ *  requestAnimationFrame is the right signal, but a browser stops firing it for a page it
+ *  is not drawing — a background tab, or a window behind another one. Waiting on it alone
+ *  would leave an export hanging forever in exactly that case, so a timer races it. */
+const nextFrame = () => new Promise(resolve => {
+  let done = false;
+  const finish = () => { if (!done) { done = true; resolve(); } };
+  requestAnimationFrame(() => requestAnimationFrame(finish));
+  setTimeout(finish, 120);
+});
 
 /** Run fn with the light theme in force, then put the theme back.
  *
@@ -96,8 +143,13 @@ const canvasBlob = canvas => new Promise(resolve => canvas.toBlob(resolve, "imag
  *  a user gesture - but a browser or a group policy can refuse, and a refusal arrives as a
  *  plain exception at the moment of writing. Rather than leave the button doing nothing,
  *  the image is saved instead and the toast says which of the two happened. */
-async function copyBlock(block) {
-  const canvas = await withLightTheme(() => blockToCanvas(block));
+function exportName(block, part) {
+  const suffix = part.key === "step" ? "" : `-${part.key}`;
+  return `${slug(blockName(block))}${suffix}.png`;
+}
+
+async function copyBlock(block, part) {
+  const canvas = await withLightTheme(() => blockToCanvas(part.el));
   const blob = await canvasBlob(canvas);
   if (navigator.clipboard && window.ClipboardItem) {
     try {
@@ -107,7 +159,7 @@ async function copyBlock(block) {
       console.warn("Clipboard refused the image, saving it instead:", err);
     }
   }
-  saveBlob(blob, `${slug(blockName(block))}.png`);
+  saveBlob(blob, exportName(block, part));
   return { canvas, how: "file" };
 }
 
@@ -122,9 +174,9 @@ function saveBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-async function downloadBlock(block) {
-  const canvas = await withLightTheme(() => blockToCanvas(block));
-  saveBlob(await canvasBlob(canvas), `${slug(blockName(block))}.png`);
+async function downloadBlock(block, part) {
+  const canvas = await withLightTheme(() => blockToCanvas(part.el));
+  saveBlob(await canvasBlob(canvas), exportName(block, part));
   return { canvas, how: "file" };
 }
 
@@ -137,17 +189,20 @@ function wireExportControls() {
     const wrap = document.createElement("div");
     wrap.className = "export-controls";
 
+    const parts = blockParts(block);
+    let chosen = parts[0];                      // the table where there is one, else the step
+
     const run = async (btn, fn) => {
       if (btn.disabled) return;
       const was = btn.textContent;
       btn.disabled = true;
       btn.textContent = "…";
       try {
-        const { canvas, how } = await fn(block);
+        const { canvas, how } = await fn(block, chosen);
         const size = `${canvas.width} × ${canvas.height}px`;
         showToast(how === "clipboard"
           ? `Copied, ${size} — paste into PowerPoint`
-          : `Saved ${slug(blockName(block))}.png, ${size}`);
+          : `Saved ${exportName(block, chosen)}, ${size}`);
       } catch (err) {
         console.error(err);
         showToast("Could not export that: " + err.message);
@@ -156,6 +211,17 @@ function wireExportControls() {
         btn.textContent = was;
       }
     };
+
+    // only where there is a choice to make: most steps hold one thing
+    if (parts.length > 1) {
+      const pick = document.createElement("select");
+      pick.className = "export-part";
+      pick.title = "What the buttons beside this export";
+      pick.innerHTML = parts.map((p, i) =>
+        `<option value="${i}">${p.label}</option>`).join("");
+      pick.addEventListener("change", () => { chosen = parts[pick.value]; });
+      wrap.appendChild(pick);
+    }
 
     const copy = document.createElement("button");
     copy.type = "button";
