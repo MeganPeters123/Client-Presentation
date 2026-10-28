@@ -128,8 +128,44 @@ async function blockToCanvas(block) {
     .map(c => (typeof Chart !== "undefined" ? Chart.getChart(c) : null))
     .filter(Boolean);
   const previous = charts.map(c => c.options.devicePixelRatio);
+  const previousAnimation = charts.map(c => c.options.animation);
 
-  charts.forEach(c => { c.options.devicePixelRatio = EXPORT_SCALE; c.resize(); });
+  // A donut that sits beside its own table carries no slice labels on screen, because the
+  // table is right there. Copied out on its own it has no table beside it, so the labels go
+  // on for the capture and come off again after.
+  const labelled = charts.filter(c => {
+    const o = c.options.plugins && c.options.plugins.donutSliceLabels;
+    return o && o.enabled === false;
+  });
+  const previousPadding = labelled.map(c => c.options.layout && c.options.layout.padding);
+
+  // Animation off first, and that is not a nicety. Chart.js animates a resize, so a capture
+  // taken a frame or two later catches bars part-grown.
+  //
+  // The size is then given explicitly rather than left to be measured. A chart drawn while
+  // its tab was hidden has a canvas of 0 x 0, and it only re-measures itself on a later
+  // frame — which a browser is in no hurry to deliver for a page it is not drawing. Copying
+  // straight after switching to a tab therefore captured nothing at all. Measuring the box
+  // here and handing the size over takes that timing out of it.
+  charts.forEach(c => {
+    c.options.animation = false;
+    c.options.devicePixelRatio = EXPORT_SCALE;
+    const box = c.canvas.parentElement;
+    const rect = box ? box.getBoundingClientRect() : null;
+    if (rect && rect.width > 0 && rect.height > 0) c.resize(rect.width, rect.height);
+    else c.resize();
+    c.update("none");
+    // and draw it now. resize() and update() between them leave the canvas at 0 x 0 —
+    // Chart.js holds the new size until its next render, which it is content to schedule
+    // for a frame that may be a long time coming. draw() is what actually applies it.
+    c.draw();
+  });
+  labelled.forEach(c => {
+    c.options.plugins.donutSliceLabels.enabled = true;
+    c.options.layout = { ...(c.options.layout || {}), padding: { top: 14, bottom: 14 } };
+    c.update("none");
+    c.draw();
+  });
   await nextFrame();
   try {
     return await html2canvas(block, {
@@ -140,7 +176,18 @@ async function blockToCanvas(block) {
       ignoreElements: el => el.classList && el.classList.contains("export-controls")
     });
   } finally {
-    charts.forEach((c, i) => { c.options.devicePixelRatio = previous[i]; c.resize(); });
+    labelled.forEach((c, i) => {
+      c.options.plugins.donutSliceLabels.enabled = false;
+      if (previousPadding[i] === undefined) delete c.options.layout.padding;
+      else c.options.layout.padding = previousPadding[i];
+    });
+    charts.forEach((c, i) => {
+      c.options.devicePixelRatio = previous[i];
+      c.options.animation = previousAnimation[i];
+      c.resize();
+      c.update("none");
+      c.draw();
+    });
   }
 }
 

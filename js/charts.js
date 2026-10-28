@@ -267,6 +267,11 @@ const barSegmentLabels = {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
+    // A segment thinner than its own text cannot hold a label, and dropping it is how a
+    // 1.3% property sliver and a 1.9% cash band ended up as unexplained stripes on a slide.
+    // Those are collected here and written outside the bar instead, on a leader line.
+    const outside = new Map();
+
     chart.data.datasets.forEach((ds, di) => {
       const meta = chart.getDatasetMeta(di);
       if (meta.hidden) return;
@@ -275,14 +280,46 @@ const barSegmentLabels = {
         if (value <= 0.05) return;
         // upright bars: the segment runs from base up to y, and its width is the bar's
         const { x, base, y, width } = el.getProps(["x", "base", "y", "width"], true);
-        if (Math.abs(base - y) < 14) return;
         const full = `${ds.label} ${value.toFixed(1)}%`;
         const figure = `${value.toFixed(1)}%`;
-        const text = ctx.measureText(full).width + 12 <= width ? full
-                   : (ctx.measureText(figure).width + 8 <= width ? figure : null);
-        if (!text) return;
-        ctx.fillStyle = onDark(ds.backgroundColor) ? "#ffffff" : "#1f1e1b";
-        ctx.fillText(text, x, (y + base) / 2);
+
+        if (Math.abs(base - y) >= 14) {
+          const text = ctx.measureText(full).width + 12 <= width ? full
+                     : (ctx.measureText(figure).width + 8 <= width ? figure : null);
+          if (text) {
+            ctx.textAlign = "center";
+            ctx.fillStyle = onDark(ds.backgroundColor) ? "#ffffff" : "#1f1e1b";
+            ctx.fillText(text, x, (y + base) / 2);
+            return;
+          }
+        }
+        if (!outside.has(i)) outside.set(i, []);
+        outside.get(i).push({ x, width, mid: (y + base) / 2, text: full });
+      });
+    });
+
+    // Written to the left of their own bar, where there is always room: the gap between the
+    // two bars is the widest space on the chart, and the first bar has the axis margin.
+    const ink = opts.color || cssVar("--ink") || "#1f1e1b";
+    const leaderInk = opts.leader || cssVar("--border") || "#cccccc";
+    outside.forEach(items => {
+      items.sort((a, b) => a.mid - b.mid);
+      const taken = [];
+      items.forEach(item => {
+        let ly = item.mid;
+        for (let n = 0; n < 40 && taken.some(v => Math.abs(v - ly) < 13); n++) ly += 13;
+        taken.push(ly);
+        const edge = item.x - item.width / 2;
+        ctx.textAlign = "right";
+        ctx.fillStyle = ink;
+        ctx.fillText(item.text, edge - 13, ly);
+        ctx.strokeStyle = leaderInk;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(edge, item.mid);
+        ctx.lineTo(edge - 6, item.mid);
+        ctx.lineTo(edge - 10, ly);
+        ctx.stroke();
       });
     });
     ctx.restore();
@@ -384,6 +421,10 @@ function onDark(colour) {
 const donutSliceLabels = {
   id: "donutSliceLabels",
   afterDatasetsDraw(chart, _args, opts) {
+    // Off for a donut that sits beside its own table, where the labels would only repeat
+    // it. The export turns them on, because a chart copied out on its own has no table
+    // next to it and a ring of unnamed colours says nothing.
+    if (opts.enabled === false) return;
     const meta = chart.getDatasetMeta(0);
     if (!meta || !meta.data || !meta.data.length) return;
     const { ctx } = chart;
@@ -418,7 +459,10 @@ const donutSliceLabels = {
     meta.data.forEach((arc, i) => {
       const value = data[i] || 0;
       const pct = (value / total) * 100;
-      if (pct < 1.5) return;                       // too thin to point at usefully
+      // Thin slices still carry a figure where there is room for them. The allocation
+      // donut holds a handful of slices and asks for every one; the currency pie runs to
+      // ten and keeps the higher bar, or the labels down one side run into each other.
+      if (pct < (opts.minPct ?? 1.5)) return;
       const label = chart.data.labels[i];
       const text = `${label} ${pct.toFixed(1)}%`;
       const mid = (arc.startAngle + arc.endAngle) / 2;
@@ -589,9 +633,12 @@ function renderPie(canvasId, legendId, rows, colorFor, { minSlice = 0.5 } = {}) 
       responsive: true, maintainAspectRatio: false, cutout: "56%",
       plugins: {
         legend: { display: false },          // the list below carries the values instead
-        tooltip: { callbacks: { label: c => `${c.label}: ${c.parsed.toFixed(1)}%` } }
+        tooltip: { callbacks: { label: c => `${c.label}: ${c.parsed.toFixed(1)}%` } },
+        // carried but dormant: see the plugin, and exportLabelledCharts below
+        donutSliceLabels: { enabled: false, minPct: 0.5, color: cssVar("--ink"), leader: cssVar("--border") }
       }
-    }
+    },
+    plugins: [donutSliceLabels]
   });
 
   if (legend) {
