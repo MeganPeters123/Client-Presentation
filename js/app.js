@@ -1132,7 +1132,6 @@ function renderCashBreakdown(lt, shownListed) {
     `${rows.length} cash ${rows.length === 1 ? "line" : "lines"} — adds up to the cash figures above`;
 }
 
-document.getElementById("positionsOnlyUnset").addEventListener("change", renderLookThroughSection);
 
 /** Which contribution the positions table is read by. Bound once on the static header rather
  *  than rebound on every render, so a sort survives editing a split in the table below it. */
@@ -1151,7 +1150,10 @@ document.querySelectorAll("#positionsTable thead th[data-sort]").forEach(th => {
  *  neutral — so it is flagged and can be set by hand right here. */
 function renderLookThroughPositions(positions) {
   const tbody = document.querySelector("#positionsTable tbody");
-  const onlyUnset = document.getElementById("positionsOnlyUnset").checked;
+  // Holdings the workbook has no figure for. Once a blank cell started counting as 0% SA
+  // this stopped being a list anyone needs to work through — across all eighteen funds it
+  // comes to one money market line — so the filter that used to narrow the table to them
+  // is gone and only the count in the heading remains, as a check that it stays at nil.
   const unset = positions.filter(p => p.origin !== "source" && p.origin !== "manual");
   // Ordered by what each line puts into whichever figure is being read, so the drivers of it
   // come first. Weight breaks the tie, which keeps a tail that is all nil — the unresearched
@@ -1163,7 +1165,7 @@ function renderLookThroughPositions(positions) {
   };
   const metric = POSITION_SORTS[positionSort.key] || POSITION_SORTS.saInc;
   const sign = positionSort.dir === "asc" ? -1 : 1;
-  const shown = (onlyUnset ? unset : positions).slice()
+  const shown = positions.slice()
     .sort((a, b) => sign * ((metric(b) - metric(a)) || (b.weight - a.weight)));
 
   document.querySelectorAll("#positionsTable thead th[data-sort]").forEach(th => {
@@ -1229,7 +1231,7 @@ function renderLookThroughPositions(positions) {
   const contribTotal = shown.reduce((s, p) => s + p.weight * p.saInc, 0);
   const globalTotal = shown.reduce((s, p) => s + p.weight * (1 - p.saInc), 0);
   foot.innerHTML = `<tr>
-      <th>${onlyUnset ? "Total shown" : "Total"}</th>
+      <th>Total</th>
       <th style="text-align:right;">${shown.reduce((s, p) => s + p.weight, 0).toFixed(2)}%</th>
       <th></th>
       <th style="text-align:right;">${contribTotal.toFixed(2)}</th>

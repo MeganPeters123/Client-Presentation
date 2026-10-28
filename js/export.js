@@ -154,19 +154,33 @@ async function blockToCanvas(block) {
     const rect = box ? box.getBoundingClientRect() : null;
     if (rect && rect.width > 0 && rect.height > 0) c.resize(rect.width, rect.height);
     else c.resize();
-    c.update("none");
-    // and draw it now. resize() and update() between them leave the canvas at 0 x 0 —
-    // Chart.js holds the new size until its next render, which it is content to schedule
-    // for a frame that may be a long time coming. draw() is what actually applies it.
-    c.draw();
   });
   labelled.forEach(c => {
     c.options.plugins.donutSliceLabels.enabled = true;
     c.options.layout = { ...(c.options.layout || {}), padding: { top: 14, bottom: 14 } };
-    c.update("none");
-    c.draw();
   });
-  await nextFrame();
+
+  // Then settle, rather than forcing a draw and hoping. Chart.js lays out and paints over
+  // a frame or two, and reaching in with draw() mid-flight produced a different partial
+  // picture each time — bars without their labels, a legend without its text. So: ask for
+  // the render, wait, and only go on once the canvas has the size it was promised. The loop
+  // is what makes it safe to press Copy the instant a tab is opened.
+  for (let attempt = 0; attempt < 8; attempt++) {
+    charts.forEach(c => c.update("none"));
+    await nextFrame();
+    const ready = charts.every(c => {
+      const want = Math.round((c.canvas.clientWidth || 0) * EXPORT_SCALE);
+      return c.canvas.width > 0 && (!want || Math.abs(c.canvas.width - want) <= EXPORT_SCALE);
+    });
+    if (ready) break;
+  }
+
+  // If a chart still has no canvas after all that, the page is not being painted at all —
+  // a window behind another one, or a tab the browser has parked. Saying so beats handing
+  // over a blank picture that only shows itself up on the slide.
+  if (charts.some(c => !c.canvas.width)) {
+    throw new Error("the chart had not finished drawing — bring the window to the front and try again");
+  }
   try {
     return await html2canvas(block, {
       scale: EXPORT_SCALE,

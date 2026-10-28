@@ -329,7 +329,7 @@ const barSegmentLabels = {
 function renderLookThroughChart(bars, order) {
   const ctx = document.getElementById("lookThroughChart").getContext("2d");
   if (lookThroughChartInstance) lookThroughChartInstance.destroy();
-  const ink2 = cssVar("--ink-2"), grid = cssVar("--grid");
+  const ink2 = cssVar("--ink-2");
 
   const datasets = order.map((key, i) => ({
     label: key,
@@ -355,7 +355,10 @@ function renderLookThroughChart(bars, order) {
       },
       scales: {
         x: { stacked: true, ticks: { color: ink2, font: { size: 12 } }, grid: { color: "transparent" } },
-        y: { stacked: true, max: 100, ticks: { color: ink2, callback: v => v + "%" }, grid: { color: grid } }
+        // no gridlines: every segment carries its own figure, so the lines were ruling
+        // through labelled blocks to help read a value nobody has to read off the axis
+        y: { stacked: true, max: 100, ticks: { color: ink2, callback: v => v + "%" },
+             grid: { display: false }, border: { display: false } }
       }
     },
     plugins: [barSegmentLabels]
