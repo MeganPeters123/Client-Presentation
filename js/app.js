@@ -506,7 +506,7 @@ function segmentsFromSnapshot(snap) {
     .sort((a, b) => b.value - a.value);
 }
 
-/** Segments feeding both the Asset Allocation card and the PPTX export — Fund Holdings takes
+/** Segments feeding the Asset Allocation card — Fund Holdings takes
  *  priority over the manually-uploaded Asset Allocation file whenever any holdings are loaded.
  *  Respects both the fund selector and the period selector (live upload vs. a saved month). */
 function getActiveAllocationSegments() {
@@ -791,8 +791,8 @@ document.getElementById("importHistoryFile").addEventListener("change", async e 
   document.getElementById(id).addEventListener("change", renderCompareSection);
 });
 
-/** Pure data computation for the current Compare Periods selection — used by both the on-screen
- *  render and the PPTX export, so the two never disagree. Returns null if not fully configured. */
+/** Pure data computation for the current Compare Periods selection, kept apart from the
+ *  rendering so a figure is worked out once. Returns null if not fully configured. */
 function computeCompareData() {
   const fund = document.getElementById("compareFundSelector").value || "all";
   const periodA = document.getElementById("comparePeriodA").value;
