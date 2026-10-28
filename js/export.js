@@ -37,29 +37,39 @@ function commonAncestor(nodes) {
 
 /** What a block can be exported as.
  *
- *  A step that holds a chart and a table is two things a slide might want, and gluing them
- *  together means neither can be had on its own. Where both are present the table comes
- *  first and is what a plain Copy gives you — Megan's call, 2026-10-28: the figures are what
- *  goes on the slide, while the chart on screen is for reading the shape of them.
+ *  A step is a heading, the thing itself, and often a note underneath. What goes on a slide
+ *  is usually the thing, so the content leads and a plain Copy gives you that: the table
+ *  where there is one, otherwise the chart. Megan's calls, 2026-10-28 — the figures for the
+ *  allocation step, the bars on their own for the look-through.
+ *
+ *  Whole step stays on the list for when the heading and the note are the point, which they
+ *  are on the look-through bars, where the note carries the property and futures caveats.
  *
  *  The table part is the <table> itself rather than its scrolling wrapper, so a table wider
  *  than the window is captured whole instead of being cut off at the edge of the scroll box. */
-function blockParts(block) {
-  const whole = { key: "step", label: "Whole step", el: block };
-  const tables = Array.from(block.querySelectorAll("table"));
-  const canvases = Array.from(block.querySelectorAll("canvas"));
-  if (!tables.length || !canvases.length) return [whole];
-
-  const tableEl = tables.length === 1 ? tables[0] : commonAncestor(tables);
-  const chartEl = canvases.length === 1
-    ? (canvases[0].closest(".chart-wrap") || canvases[0])
-    : commonAncestor(canvases);
-
+function blockParts(block, { visibleOnly = false } = {}) {
+  // A step can hold something that is not on screen — the cash breakdown under the
+  // positions table only appears for some funds. Counted, it drags the common ancestor up
+  // to the whole step and the table can no longer be had on its own; captured, it is a
+  // blank. Visibility is only knowable once the tab is showing, so the parts are worked out
+  // when a button is pressed rather than when the buttons are built.
+  const shown = el => !visibleOnly || el.getClientRects().length > 0;
+  const tables = Array.from(block.querySelectorAll("table")).filter(shown);
+  const canvases = Array.from(block.querySelectorAll("canvas")).filter(shown);
   const parts = [];
-  if (tableEl && tableEl !== block) parts.push({ key: "table", label: "Table only", el: tableEl });
-  if (chartEl && chartEl !== block) parts.push({ key: "chart", label: "Chart only", el: chartEl });
-  parts.push(whole);
-  return parts.length > 1 ? parts : [whole];
+
+  if (tables.length) {
+    const el = tables.length === 1 ? tables[0] : commonAncestor(tables);
+    if (el && el !== block) parts.push({ key: "table", label: "Table only", el });
+  }
+  if (canvases.length) {
+    const el = canvases.length === 1
+      ? (canvases[0].closest(".chart-wrap") || canvases[0])
+      : commonAncestor(canvases);
+    if (el && el !== block) parts.push({ key: "chart", label: "Chart only", el });
+  }
+  parts.push({ key: "step", label: "Whole step", el: block });
+  return parts;
 }
 
 function blockName(block) {
@@ -180,6 +190,9 @@ async function downloadBlock(block, part) {
   return { canvas, how: "file" };
 }
 
+/** Every block's option list, refreshed when a tab is shown. */
+const pickers = [];
+
 /** Copy and PNG on every exportable block, put into the heading it belongs to. */
 function wireExportControls() {
   exportableBlocks().forEach(block => {
@@ -189,8 +202,13 @@ function wireExportControls() {
     const wrap = document.createElement("div");
     wrap.className = "export-controls";
 
-    const parts = blockParts(block);
-    let chosen = parts[0];                      // the table where there is one, else the step
+    // null means "whatever this block leads with", resolved at the moment of use
+    let chosenKey = null;
+    const resolvePart = () => {
+      const parts = blockParts(block, { visibleOnly: true });
+      if (!chosenKey) return parts[0];
+      return parts.find(p => p.key === chosenKey) || parts[parts.length - 1];
+    };
 
     const run = async (btn, fn) => {
       if (btn.disabled) return;
@@ -198,6 +216,7 @@ function wireExportControls() {
       btn.disabled = true;
       btn.textContent = "…";
       try {
+        const chosen = resolvePart();
         const { canvas, how } = await fn(block, chosen);
         const size = `${canvas.width} × ${canvas.height}px`;
         showToast(how === "clipboard"
@@ -212,16 +231,25 @@ function wireExportControls() {
       }
     };
 
-    // only where there is a choice to make: most steps hold one thing
-    if (parts.length > 1) {
-      const pick = document.createElement("select");
-      pick.className = "export-part";
-      pick.title = "What the buttons beside this export";
-      pick.innerHTML = parts.map((p, i) =>
-        `<option value="${i}">${p.label}</option>`).join("");
-      pick.addEventListener("change", () => { chosen = parts[pick.value]; });
-      wrap.appendChild(pick);
-    }
+    // Filled in when it is opened rather than now: what a step holds depends on the fund
+    // and the month, and at the moment these buttons are built the tab is usually hidden.
+    const pick = document.createElement("select");
+    pick.className = "export-part";
+    pick.title = "What the buttons beside this export";
+    const fillOptions = () => {
+      if (!block.getClientRects().length) return;        // its tab is hidden; nothing to read
+      const parts = blockParts(block, { visibleOnly: true });
+      const want = chosenKey || parts[0].key;
+      pick.innerHTML = parts.map(p =>
+        `<option value="${p.key}"${p.key === want ? " selected" : ""}>${p.label}</option>`).join("");
+      pick.style.display = parts.length > 1 ? "" : "none";
+    };
+    pick.addEventListener("mousedown", fillOptions);
+    pick.addEventListener("focus", fillOptions);
+    pick.addEventListener("change", () => { chosenKey = pick.value; });
+    pickers.push(fillOptions);
+    fillOptions();
+    wrap.appendChild(pick);
 
     const copy = document.createElement("button");
     copy.type = "button";
@@ -243,3 +271,25 @@ function wireExportControls() {
 }
 
 wireExportControls();
+
+/* A block's parts can only be read while it is on screen, and what is on screen changes two
+ * ways: the tab being switched, and the data arriving. Both are plain globals that
+ * everything else calls by name, so wrapping them catches every route in — the tab bar, the
+ * empty-state link, the tab restored at startup, an upload, and a sign-in. */
+const refreshPickers = () => pickers.forEach(fill => {
+  try { fill(); } catch (e) { console.warn("export controls:", e); }
+});
+
+function wrapGlobal(name) {
+  const inner = window[name];
+  if (typeof inner !== "function") return;
+  window[name] = function (...args) {
+    const result = inner.apply(this, args);
+    refreshPickers();
+    return result;
+  };
+}
+
+wrapGlobal("showTab");
+wrapGlobal("renderAll");
+refreshPickers();
