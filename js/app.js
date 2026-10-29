@@ -2187,6 +2187,46 @@ renderAll();
 
 /* ---------- saved history, read from Supabase ---------- */
 
+/** The newest snapshot in this browser's copy, which is what the dashboard is drawing from. */
+function localHistorySavedAt() {
+  let newest = null;
+  Object.values(historyStore.periods || {}).forEach(s => {
+    if (s.savedAt instanceof Date && !isNaN(s.savedAt) && (!newest || s.savedAt > newest)) newest = s.savedAt;
+  });
+  return newest;
+}
+
+/** Say so when the central history has moved on since this copy was taken.
+ *
+ *  Asked rather than done: Save this period writes only to this browser, and loading replaces
+ *  the whole store, so a silent auto-load would throw away a period saved here and not yet
+ *  built centrally. The banner carries the button instead, and sits above the tabs where it
+ *  is seen whichever tab is open — the Data tab is where the Load button lives, and that is
+ *  precisely the tab nobody is looking at.
+ */
+async function checkCloudHistoryFresh() {
+  const bar = document.getElementById("staleHistoryBar");
+  if (!bar || typeof cloudAvailable !== "function" || !cloudAvailable()) return;
+  bar.style.display = "none";
+  try {
+    if (!(await cloudSession())) return;                 // signed out: nothing to compare against
+    const remote = await cloudHistoryUpdatedAt();
+    if (!remote) return;
+    const local = localHistorySavedAt();
+    // a minute of slack, so the clock skew between this machine and the server is not news
+    if (local && remote - local < 60000) return;
+    const when = remote.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    document.getElementById("staleHistoryText").textContent = local
+      ? `The saved history was rebuilt on ${when}. What is on screen is this browser's older copy.`
+      : `There is a saved history, rebuilt on ${when}. Nothing is loaded in this browser yet.`;
+    bar.style.display = "flex";
+  } catch (e) {
+    // a failed check is not worth a word on screen: the figures that are there are still the
+    // figures that were there, and the Data tab says what is and is not loaded
+    console.error("Could not check whether the saved history has moved on:", e.message);
+  }
+}
+
 /** The panel reflects one of three states and nothing else: the library did not load, you
  *  are signed out, you are signed in. Everything in it is additive — Import history still
  *  works, and a browser that never signs in behaves exactly as it did before. */
@@ -2233,6 +2273,8 @@ async function cloudLoadIntoDashboard() {
     hint.textContent = `Loaded ${res.snapshots} snapshots and ${res.tradeMonths} months of trade activity`
       + (missing.length ? ` — still to upload here: ${missing.join(" and ")}.` : ", with the revenue split and index weights.");
     showToast(`Loaded ${res.snapshots} snapshots from the saved history`);
+    const bar = document.getElementById("staleHistoryBar");
+    if (bar) bar.style.display = "none";
   } catch (e) {
     console.error(e);
     hint.textContent = `Could not load: ${e.message}. The .json file is still there to import.`;
@@ -2266,12 +2308,19 @@ if (document.getElementById("cloudPanel")) {
 
   document.getElementById("cloudLoadBtn").addEventListener("click", cloudLoadIntoDashboard);
 
+  document.getElementById("staleHistoryLoadBtn").addEventListener("click", async () => {
+    document.getElementById("staleHistoryBar").style.display = "none";
+    await cloudLoadIntoDashboard();
+    await checkCloudHistoryFresh();      // back if the load failed, gone if it worked
+  });
+
   document.getElementById("cloudSignOutBtn").addEventListener("click", async () => {
     await cloudSignOut();
     await renderCloudPanel("Signed out. What is already loaded stays until you reload the page.");
   });
 
   renderCloudPanel();
+  checkCloudHistoryFresh();
 }
 
 /* ---------- GICS sectors ---------- */

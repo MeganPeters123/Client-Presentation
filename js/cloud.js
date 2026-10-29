@@ -57,6 +57,22 @@ async function cloudSignOut() {
  *  PostgREST answers a thousand rows at a time, so this pages rather than trusting one
  *  request to carry everything — there are 380 snapshots today and nothing stops that
  *  growing past the limit without anyone noticing it had. */
+/** When the saved history was last written centrally, or null if that cannot be told.
+ *
+ *  One row, not the history: the dashboard reads its figures from this browser's own copy
+ *  and only goes to Supabase when asked, so a rebuild upstream leaves that copy quietly out
+ *  of date — which is exactly how a day went by with the right figures in the table and the
+ *  old ones on screen. This is cheap enough to ask on every load.
+ */
+async function cloudHistoryUpdatedAt() {
+  const c = getCloudClient();
+  if (!c) return null;
+  const { data, error } = await c.from("snapshots")
+    .select("saved_at").order("saved_at", { ascending: false }).limit(1);
+  if (error || !data || !data.length || !data[0].saved_at) return null;
+  return new Date(data[0].saved_at);
+}
+
 async function cloudLoadHistory() {
   const c = getCloudClient();
   if (!c) throw new Error("not connected");

@@ -166,6 +166,13 @@ table.data-table td.num{ text-align:right; font-variant-numeric:tabular-nums; co
 table.data-table td.num.delta-up{ color:var(--good); }
 table.data-table td.num.delta-down{ color:var(--bad); }
 table.data-table tr:hover td{ background:var(--surface-2); }
+/* Says the figures on screen are this browser's older copy. Above the tabs on purpose:
+   the Load button lives on the Data tab, which is the one tab nobody is looking at. */
+.stale-bar{ display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+            margin:0 0 12px; padding:9px 13px; font-size:12.5px; color:var(--ink);
+            background:var(--surface-2); border:1px solid var(--border);
+            border-left:3px solid var(--accent); border-radius:var(--radius-md); }
+.stale-bar .btn{ margin-left:auto; }
 table.data-table tfoot td{ border-top:1.5px solid var(--border); border-bottom:none; font-weight:650; color:var(--ink); padding-top:9px; }
 .table-scroll{ overflow-x:auto; max-height:420px; overflow-y:auto; }
 .chip{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:650; }
