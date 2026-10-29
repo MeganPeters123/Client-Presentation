@@ -161,6 +161,10 @@ table.data-table th:hover{ color:var(--ink); }
 table.data-table th .sort-ind{ opacity:.5; margin-left:3px; }
 table.data-table td{ padding:7px 10px; border-bottom:1px solid var(--grid); color:var(--ink-2); white-space:nowrap; }
 table.data-table td.num{ text-align:right; font-variant-numeric:tabular-nums; color:var(--ink); }
+/* td.num sets a colour, and outranks the bare .delta-* classes on specificity, so the
+   change columns need the rule spelled out at table level to tint at all. */
+table.data-table td.num.delta-up{ color:var(--good); }
+table.data-table td.num.delta-down{ color:var(--bad); }
 table.data-table tr:hover td{ background:var(--surface-2); }
 table.data-table tfoot td{ border-top:1.5px solid var(--border); border-bottom:none; font-weight:650; color:var(--ink); padding-top:9px; }
 .table-scroll{ overflow-x:auto; max-height:420px; overflow-y:auto; }
