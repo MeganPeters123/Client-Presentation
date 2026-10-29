@@ -212,15 +212,18 @@ def parse_custodian_html(path):
         split = split_by_class.get(r["label"].strip(), {"local": 0.0, "foreign": 0.0})
         label = title_case(r["label"])
         for side in ("local", "foreign"):
-            # abs, not >. An overdrawn balance is real money: the global fund ran its rand
-            # cash at -0.42% of the fund in February 2025, and a bare > dropped that side
-            # altogether, leaving the categories adding up to 100.42% of a fund and, once
-            # converted, R7.7m more than the fund held. A negative side is kept as negative.
-            if abs(split[side]) > 0.005:
-                segments.append({
-                    "category": local_foreign_label(label, side),
-                    "value": (split[side] / 100.0) * fund_total,
-                })
+            # Kept whenever it comes to anything at all once rounded to the cent — the
+            # precision this is written at — rather than whenever it passes a floor set in
+            # weight. Two faults lived in the old test. A bare > dropped a *negative* side
+            # altogether: the global fund ran its rand cash at -0.42% of the fund in February
+            # 2025, which left the categories adding up to 100.42% of a fund and, converted,
+            # R7.7m more than the fund held. And a floor in weight dropped a side that was
+            # small as a percentage but real as money: one euro zero-coupon bond, R3,507 of a
+            # R2.49bn fund. Both left the categories not adding up to the fund, and a figure
+            # that nearly adds up sends the reader looking for the rest.
+            value = (split[side] / 100.0) * fund_total
+            if round(value, 2) != 0:
+                segments.append({"category": local_foreign_label(label, side), "value": value})
 
     if not segments:
         return []
@@ -492,11 +495,10 @@ def parse_pres_xlsx(path):
     segments = []
     for cat, split in split_by_class.items():
         for side in ("local", "foreign"):
-            if split[side] > 0.005:
-                segments.append({
-                    "category": local_foreign_label(cat, side),
-                    "value": (split[side] / 100.0) * fund_total,
-                })
+            # the same test as the custodian format above, and for the same reasons
+            value = (split[side] / 100.0) * fund_total
+            if round(value, 2) != 0:
+                segments.append({"category": local_foreign_label(cat, side), "value": value})
     if not segments:
         return []
 
