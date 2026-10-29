@@ -278,7 +278,16 @@ function listHoldingMonthsForFund(fund) {
 function holdingKey(h) {
   const issuer = typeof resolveIssuer === "function" ? resolveIssuer(h.ticker, h.name) : null;
   if (issuer) return issuer;
-  return (h.ticker || h.name || "").trim().toUpperCase();
+  return hkNormalised((h.ticker || h.name || "").trim().toUpperCase());
+}
+
+/** A Hong Kong code arrives spaced from one export and run together from another, which
+ *  split Tencent into two rows — most funds keyed on "700 HK" and one on "700HK", ranked
+ *  as two companies in the same table. Only a numeric code can take either form, so
+ *  no lettered ticker that happens to end in HK can be caught by this; every other ticker is
+ *  left exactly as the file wrote it, which is what resolveIssuer's aliases are for. */
+function hkNormalised(code) {
+  return code.replace(/^(\d{1,5})\s*HK$/, "HK$1");
 }
 
 /** What a holding is called on screen, where the export's own name is out of date.

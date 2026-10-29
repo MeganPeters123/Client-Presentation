@@ -11,6 +11,11 @@ Usage:
 
 Anything it can't classify is listed with its value and row count rather than being
 folded into a bucket — a wrong guess here would silently misstate trading activity.
+
+The monthly totals are in rand. The reports give each fund's values in its own base
+currency, so the global fund's dollars are converted at the month's rate, which
+build_history.py has already written onto the holdings snapshots — run that first for a
+new month, or the dollar rows are left out of the totals and reported.
 """
 
 import argparse
@@ -108,7 +113,31 @@ def discover_trade_files(folder):
     return found, malformed
 
 
-def summarise(rows, rules, fund_names=None, fund_currency=None):
+def zar_rates(history_path):
+    """{month: {currency: rand per unit}} from the holdings history.
+
+    The trade reports give values in each fund's own base currency, so the global fund's
+    dollars were being added to rand buy and sell totals a dollar to a rand — between R35m
+    and R381m a month, against months that run R1bn to R4bn. build_history.py reads the
+    month's rate out of the valuation files and writes it onto every snapshot, so the rate
+    this needs is already in the file this writes into.
+    """
+    if not history_path.exists():
+        return {}
+    try:
+        with open(history_path, "r", encoding="utf-8") as fh:
+            periods = json.load(fh).get("periods") or {}
+    except (OSError, ValueError):
+        return {}
+    rates = {}
+    for snap in periods.values():
+        ccy, rate, month = snap.get("baseCcy"), snap.get("zarRate"), snap.get("period")
+        if ccy and ccy != "ZAR" and rate and month:
+            rates.setdefault(month, {})[ccy] = rate
+    return rates
+
+
+def summarise(rows, rules, fund_names=None, fund_currency=None, rates=None):
     """Fold classified rows into per-(month, source, class, action) value totals, and
     alongside them per-(month, fund, security, class, action) totals for the top trades.
 
@@ -117,11 +146,15 @@ def summarise(rows, rules, fund_names=None, fund_currency=None):
 
     fund_currency names the funds whose base currency is not rand. The reports give values
     in base, so the Global Fund's are in dollars and must never be ranked against rand as
-    though they were the same unit."""
+    though they were the same unit. The per-month activity totals are one figure for the
+    firm and so are converted with `rates`; the per-share lines keep the fund's own currency
+    and carry the rand figure beside it, so a fund can be read in its own money."""
     fund_names = {k.lower(): v for k, v in (fund_names or {}).items()}
     fund_currency = {k.lower(): v for k, v in (fund_currency or {}).items() if not k.startswith("_")}
+    rates = rates or {}
+    unconverted = defaultdict(lambda: {"value": 0.0, "count": 0})
     summary = defaultdict(lambda: {"value": 0.0, "count": 0})
-    by_security = defaultdict(lambda: {"value": 0.0, "count": 0, "quantity": 0.0})
+    by_security = defaultdict(lambda: {"value": 0.0, "count": 0, "quantity": 0.0, "valueZar": 0.0})
     unknown_actions = defaultdict(lambda: {"value": 0.0, "count": 0, "sources": set()})
     unknown_classes = defaultdict(lambda: {"value": 0.0, "count": 0, "sources": set()})
     defaulted = defaultdict(lambda: {"value": 0.0, "count": 0, "sources": set(), "asset_class": ""})
@@ -149,20 +182,34 @@ def summarise(rows, rules, fund_names=None, fund_currency=None):
             entry["count"] += 1
             entry["sources"].add(row["source"])
             entry["asset_class"] = asset_class
-        key = (row["month"], row["source"], asset_class, action)
-        summary[key]["value"] += value
-        summary[key]["count"] += 1
-
         code = (row["fund"] or "").lower()
         fund = fund_names.get(code, row["fund"] or "")
+        ccy = fund_currency.get(code, "ZAR")
+        rate = 1.0 if ccy == "ZAR" else (rates.get(row["month"]) or {}).get(ccy)
+
+        # A month's activity is one figure for the firm, so it has to be in one currency.
+        # With no rate the row is left out and said out loud, rather than a dollar passing
+        # for a rand — which is the fault this conversion exists to fix.
+        if rate is None:
+            entry = unconverted[(row["month"], ccy)]
+            entry["value"] += value
+            entry["count"] += 1
+        else:
+            key = (row["month"], row["source"], asset_class, action)
+            summary[key]["value"] += value * rate
+            summary[key]["count"] += 1
+
         skey = (row["month"], row["source"], fund, (row["security"] or "").strip(),
-                (row.get("ticker") or "").strip(), asset_class, action, is_derivative(row),
-                fund_currency.get(code, "ZAR"))
+                (row.get("ticker") or "").strip(), asset_class, action, is_derivative(row), ccy)
         by_security[skey]["value"] += value
         by_security[skey]["count"] += 1
         by_security[skey]["quantity"] += abs(row.get("quantity") or 0.0)
+        if rate is not None:
+            by_security[skey]["valueZar"] += value * rate
+        else:
+            by_security[skey]["noRate"] = True
 
-    return summary, by_security, unknown_actions, unknown_classes, defaulted
+    return summary, by_security, unknown_actions, unknown_classes, defaulted, unconverted
 
 
 def report(summary, unknown_actions, unknown_classes, defaulted, months):
@@ -212,6 +259,19 @@ def report(summary, unknown_actions, unknown_classes, defaulted, months):
             print(f"   {label:22} R {agg['value']:>16,.2f}  ({agg['count']} rows, {srcs})")
 
 
+def report_unconverted(unconverted):
+    """Rows left out of the monthly totals for want of a rate — which means the holdings
+    history has not been built for that month yet. Run build_history.py first."""
+    if not unconverted:
+        return
+    print()
+    print("-" * 78)
+    print("LEFT OUT OF THE MONTHLY TOTALS — no rand rate for the fund's currency.")
+    print("Build the holdings history for these months first, then run this again:")
+    for (month, ccy), agg in sorted(unconverted.items()):
+        print(f"   {month}  {ccy} {agg['value']:>16,.2f}  ({agg['count']} rows)")
+
+
 def write_into_history(summary, by_security, history_path):
     """Merge the trade summary into the dashboard's history file under a 'trades' key,
     leaving the holdings 'periods' untouched."""
@@ -240,6 +300,10 @@ def write_into_history(summary, by_security, history_path):
                 "assetClass": asset_class, "action": action, "ccy": ccy,
                 "value": round(agg["value"], 2), "count": agg["count"],
                 "quantity": round(agg["quantity"], 4)}
+        # the same figure in rand, so lines from funds reporting in different currencies can
+        # be added and ranked together; absent where there was no rate for that month
+        if not agg.get("noRate"):
+            line["valueZar"] = round(agg["valueZar"], 2)
         if derivative:
             line["derivative"] = True
         entry.setdefault("bySecurity", []).append(line)
@@ -332,15 +396,18 @@ def main():
     if not rows:
         sys.exit(f"\nNo rows in {months[0]}..{months[-1]} — the files cover {all_months[0]}..{all_months[-1]}.")
 
-    summary, by_security, unknown_actions, unknown_classes, defaulted = summarise(
-        rows, rules, config.get("trade_fund_names"), config.get("trade_fund_currency"))
+    history_path = Path(config["output"])
+    summary, by_security, unknown_actions, unknown_classes, defaulted, unconverted = summarise(
+        rows, rules, config.get("trade_fund_names"), config.get("trade_fund_currency"),
+        zar_rates(history_path))
     report(summary, unknown_actions, unknown_classes, defaulted, months)
+    report_unconverted(unconverted)
 
     if args.report:
         print("\nReport only — nothing written.")
         return
 
-    count = write_into_history(summary, by_security, Path(config["output"]))
+    count = write_into_history(summary, by_security, history_path)
     print(f"\nWrote trade activity for {count} month(s) into {config['output']}")
 
     if supabase_push.configured(config):

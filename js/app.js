@@ -1772,8 +1772,14 @@ function renderTradeActivitySection() {
   const series = tradeSeriesToPlot(showAll);
 
   const first = activity[0].label, last = activity[activity.length - 1].label;
+  // Rand throughout: a month's activity is one figure for the firm, so the dollar fund's
+  // trades are converted rather than added a dollar to a rand, which cost up to R381m in a
+  // single month. Said on the card, because the figures moved when it was fixed.
+  const anyForeign = listTradeMonths().some(m =>
+    ((historyStore.trades[m] || {}).bySecurity || []).some(l => (l.ccy || "ZAR") !== "ZAR"));
   document.getElementById("tradeActivitySubtitle").textContent =
     `${first} – ${last} · buys above the line, sells below` +
+    (anyForeign ? " · in rand, foreign funds at the month-end rate" : "") +
     (showAll ? "" : " · cash and money market excluded from the chart");
 
   renderTradeActivityChart(activity, series);
@@ -1874,7 +1880,7 @@ function renderTopTradesSection() {
   const fundSel = document.getElementById("topTradesFund");
   // the dashboard is read one fund at a time, so open on a fund — the one picked elsewhere
   // if it traded, else the first — with all the rand funds together as the last option
-  fillSelect(fundSel, [...funds.map(f => ({ value: f, label: f })), { value: "all", label: "All rand funds" }],
+  fillSelect(fundSel, [...funds.map(f => ({ value: f, label: f })), { value: "all", label: "All funds" }],
              funds.includes(selectedFund) ? selectedFund : funds[0]);
   const fund = fundSel.value;
 
@@ -1885,13 +1891,20 @@ function renderTopTradesSection() {
   const assetClass = classSel.value;
   const withDerivatives = document.getElementById("topTradesDerivatives").checked;
 
+  // Across funds everything is read in rand: build_trades.py carries each line's rand figure
+  // beside the fund's own, so the dollar fund can be ranked with the rest instead of being
+  // left out of the view. One fund on its own is read in the currency it reports in.
+  const inRand = fund === "all";
+  const randValue = l => (l.ccy || "ZAR") === "ZAR" ? (l.value || 0)
+                       : (l.valueZar != null ? l.valueZar : null);
+  const lineValue = l => inRand ? randValue(l) : (l.value || 0);
   const lines = all.filter(l =>
     l.month >= from && l.month <= to &&
     (l.action === "Buy" || l.action === "Sell") &&
     (assetClass === "all" || l.assetClass === assetClass) &&
     (withDerivatives || !l.derivative) &&
-    // rand and dollar values can't be ranked against each other, so "all" is the rand book
-    (fund === "all" ? (l.ccy || "ZAR") === "ZAR" : l.fund === fund));
+    // a line with no rand figure predates the rate and can't be added to one, so it stays out
+    (inRand ? randValue(l) !== null : l.fund === fund));
 
   // One row per company and side. Trades key exactly as holdings do — by ticker, with both
   // legs of a dual listing under the issuer — so the London and Johannesburg lines of BHP
@@ -1902,8 +1915,8 @@ function renderTopTradesSection() {
   lines.forEach(l => {
     const key = holdingKey({ ticker: l.ticker, name: l.security });
     const map = bySide[l.action];
-    const row = map.get(key) || { security: names.get(key) || (l.security || "").trim(), value: 0, count: 0, funds: new Set(), ccy: l.ccy || "ZAR" };
-    row.value += l.value || 0;
+    const row = map.get(key) || { security: names.get(key) || (l.security || "").trim(), value: 0, count: 0, funds: new Set(), ccy: inRand ? "ZAR" : (l.ccy || "ZAR") };
+    row.value += lineValue(l);
     row.count += l.count || 0;
     row.funds.add(l.fund);
     map.set(key, row);
@@ -1912,7 +1925,8 @@ function renderTopTradesSection() {
   // a single fund's trades read as a share of that fund: its NAV at the end of the period
   const snap = fund !== "all" ? getFundSnapshotAtOrBefore(fund, to) : null;
   const nav = snap && snap.total > 0 ? snap.total : null;
-  const navCcy = lines.length ? lines[0].ccy : "ZAR";
+  // the snapshot knows the currency it is reported in; a trade line only knows its fund's
+  const navCcy = (snap && snap.baseCcy) || (lines.length ? lines[0].ccy : "ZAR");
 
   // Up and down weights, as the commentary pack has them: buys less sells per share, for the
   // shares held at both ends of the period. Entries and exits are left out because Portfolio
@@ -2014,8 +2028,13 @@ function renderTopTradesSection() {
   if (netMode && fund !== "all") notes.push(continuingKnown
     ? `Buys less sells for shares held at both ${monthLabelFromKey(shiftMonthKey(from, -1))} and ${monthLabelFromKey(to)}; entries and exits are under Portfolio Changes.`
     : "Holdings at one end of the period aren't saved, so entries and exits can't be told apart and every share is shown.");
-  if (fund === "all" && all.some(l => l.ccy && l.ccy !== "ZAR"))
-    notes.push("Funds that report in another currency (the Global Fund, in US dollars) are left out of the all-funds view; pick one on its own to see it.");
+  if (inRand) {
+    const foreign = all.filter(l => (l.ccy || "ZAR") !== "ZAR");
+    if (foreign.some(l => l.valueZar != null))
+      notes.push("Funds reporting in another currency (the Global Fund, in US dollars) are converted at that month's rate so they can be ranked with the rest; pick a fund on its own to read it in its own currency.");
+    if (foreign.some(l => l.valueZar == null))
+      notes.push("Some foreign-currency trades have no rand figure saved and are left out — rebuild the trade history to bring them in.");
+  }
   if (nav) notes.push(`% of NAV is against ${fmtTradeValue(nav, navCcy)} at ${monthLabelFromKey(snap.period)}.`);
   else if (fund !== "all") notes.push("No holdings saved for this fund at the end of the period, so % of NAV can't be shown.");
   if (!withDerivatives) notes.push("Index futures and options are left out.");
