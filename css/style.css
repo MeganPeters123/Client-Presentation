@@ -178,6 +178,13 @@ table.data-table tfoot td{ border-top:1.5px solid var(--border); border-bottom:n
 /* the funds list is one row per mandate and stops there, so it is given the room to
    show them all rather than a scrollbar inside a card that already scrolls */
 .table-scroll.funds-table{ max-height:none; }
+/* a fund that stops being saved leaves the consolidated total without a word, so the gap
+   gets a line of its own under the table — in the step, so it exports with it */
+.gap-note{ margin-top:10px; padding:8px 12px; font-size:12px; line-height:1.55; color:var(--ink-2);
+           background:var(--surface-2); border:1px solid var(--border);
+           border-left:3px solid var(--ink-muted); border-radius:var(--radius-md); }
+.gap-note.warn{ border-left-color:var(--bad); }
+.gap-note strong{ color:var(--ink); font-weight:650; }
 .chip{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:650; }
 .chip.buy{ background:rgba(0,131,0,0.12); color:var(--good); }
 .chip.sell{ background:rgba(208,59,59,0.12); color:var(--bad); }

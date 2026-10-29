@@ -170,7 +170,26 @@ function snapshotZarRate(snap) {
  *  rate), so a consolidated figure can say so rather than just be smaller than the parts. */
 function getConsolidatedAtPeriod(monthKey) {
   const funds = listAllFundsInHistory();
-  const included = funds.map(f => getFundSnapshotAtOrBefore(f, monthKey)).filter(Boolean);
+
+  // Which funds made it in, and what happened to the ones that did not. A fund with nothing
+  // saved for the month leaves the total quietly: the figure simply gets smaller, and the
+  // only clue is a fund count nobody reads. Two cases are worth saying out loud, so they are
+  // collected here rather than inferred from a shorter table — a fund standing on an older
+  // month's figure (carried), and one too old to stand on at all (missing). A fund whose
+  // history only starts later is neither; it was not a fund that month.
+  const included = [], carried = [], missing = [];
+  funds.forEach(fund => {
+    const latest = getFundSnapshotAtOrBefore(fund, monthKey, null);
+    if (!latest) return;
+    const monthsOld = monthsBetween(latest.period, monthKey);
+    if (monthsOld > MAX_CARRY_FORWARD_MONTHS) {
+      missing.push({ fund, lastPeriod: latest.period, monthsOld,
+                     total: latest.total, baseCcy: latest.baseCcy, zarRate: latest.zarRate });
+      return;
+    }
+    if (monthsOld > 0) carried.push({ fund, period: latest.period, monthsOld });
+    included.push(latest);
+  });
 
   // Currency-blind history predates the rebuild that records a base currency. Converting
   // nothing and eliminating nothing is the figure this dashboard has always shown; doing
@@ -216,6 +235,7 @@ function getConsolidatedAtPeriod(monthKey) {
     .sort((a, b) => b.value - a.value);
   return {
     total, segments, funds: included, currencyAware, converted, unpriced, eliminations,
+    carried, missing,
     eliminated: eliminations.reduce((s, e) => s + e.value, 0)
   };
 }

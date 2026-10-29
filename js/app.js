@@ -766,6 +766,40 @@ function renderFundsSection() {
       <td class="num">100.0%</td><td></td>
     </tr>`;
 
+  // A fund that stops being saved does not announce itself. It drops out of the consolidated
+  // figure, the total simply comes out smaller, and the only trace is a fund count nobody
+  // reads — which is indistinguishable from a month where the firm genuinely shrank. Name
+  // the funds and the month each was last saved, so a file not yet loaded is told apart from
+  // a mandate that has closed. Inside the step, so it travels with the table on export.
+  const gapNote = document.getElementById("fundsGapNote");
+  const missing = (cons && cons.missing) || [], carried = (cons && cons.carried) || [];
+  if (!missing.length && !carried.length) {
+    gapNote.style.display = "none";
+  } else {
+    const label = monthLabelFromKey(selectedPeriod);
+    const lastSeen = m => {
+      // its own currency where there is no rate to turn it into rand, rather than a dollar
+      // figure wearing a rand sign
+      const rate = m.baseCcy && m.baseCcy !== "ZAR" ? m.zarRate : 1;
+      return rate ? `R ${fmtCurrency(m.total * rate)}` : `${m.baseCcy} ${fmtCurrency(m.total)}`;
+    };
+    const lines = [];
+    if (missing.length) {
+      lines.push(`<strong>${missing.length === 1 ? "One fund is" : missing.length + " funds are"} not in this total.</strong> `
+        + `Nothing saved for ${missing.length === 1 ? "it" : "them"} within ${MAX_CARRY_FORWARD_MONTHS} months of ${label}: `
+        + missing.map(m => `${escAttr(m.fund)} — last saved ${monthLabelFromKey(m.lastPeriod)} at ${lastSeen(m)}`).join("; ")
+        + ". A closed mandate belongs here; a file not yet loaded does not.");
+    }
+    if (carried.length) {
+      lines.push(`<strong>${carried.length === 1 ? "One fund stands" : carried.length + " funds stand"} at an older figure.</strong> `
+        + carried.map(c => `${escAttr(c.fund)} at its ${monthLabelFromKey(c.period)} total`).join("; ")
+        + `, carried forward for want of a ${label} file.`);
+    }
+    gapNote.innerHTML = lines.join("<br>");
+    gapNote.className = missing.length ? "gap-note warn" : "gap-note";
+    gapNote.style.display = "block";
+  }
+
   // The trend is its own step, heading and all: one card holding a scrolling table of
   // eighteen funds with a chart pressed underneath it was a lot to take in at once, and as
   // two steps each can be copied on its own as well.
@@ -866,6 +900,11 @@ function consolidationBasis(cons) {
   if (cons.eliminated) parts.push(`less R ${fmtCurrency(cons.eliminated)} held in one another`);
   cons.converted.forEach(c => parts.push(`${c.fund} at ${c.ccy}/ZAR ${c.rate.toFixed(4)}`));
   cons.unpriced.forEach(u => parts.push(`${u.fund} left out — no ${u.ccy} rate`));
+  // Named in full under the funds table; here it is one part among several, so a firm with
+  // four closed mandates does not get a basis line four funds long.
+  const gone = cons.missing || [];
+  if (gone.length === 1) parts.push(`${gone[0].fund} left out — nothing saved since ${monthLabelFromKey(gone[0].lastPeriod)}`);
+  else if (gone.length) parts.push(`${gone.length} funds left out — named under the funds table`);
   return parts.join(" · ");
 }
 
@@ -898,6 +937,25 @@ function renderCompareSection() {
   document.getElementById("compareColA").textContent = data.labelA;
   document.getElementById("compareColB").textContent = data.labelB;
   document.getElementById("compareBasis").textContent = consolidationBasis(data.consB);
+
+  // A fund counted in one month and not the other moves the total by its whole value, and on
+  // this card that lands in the change column looking like performance. Name it instead.
+  const inA = new Set(data.consA.funds.map(s => s.fund)), inB = new Set(data.consB.funds.map(s => s.fund));
+  const left = [...inA].filter(f => !inB.has(f)), joined = [...inB].filter(f => !inA.has(f));
+  const gapNote = document.getElementById("compareGapNote");
+  if (!left.length && !joined.length) {
+    gapNote.style.display = "none";
+  } else {
+    const named = list => list.map(escAttr).join(", ");
+    const lines = [inA.size === inB.size
+      ? `<strong>The two months count the same number of funds, but not the same funds.</strong>`
+      : `<strong>The two months do not count the same funds</strong> — ${inA.size} in ${data.labelA}, ${inB.size} in ${data.labelB}.`];
+    if (left.length) lines.push(`In ${data.labelA} and not in ${data.labelB}: ${named(left)} — ${left.length === 1 ? "that fund's whole value is" : "those funds' whole value is"} in the change below.`);
+    if (joined.length) lines.push(`In ${data.labelB} and not in ${data.labelA}: ${named(joined)}.`);
+    gapNote.innerHTML = lines.join(" ");
+    gapNote.className = "gap-note warn";
+    gapNote.style.display = "block";
+  }
 
   document.querySelector("#compareTable tbody").innerHTML = data.rows.map(r => `
     <tr>
