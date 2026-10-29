@@ -124,6 +124,14 @@ async function withLightTheme(fn) {
 
 /** The block as a canvas at EXPORT_SCALE, charts redrawn at that scale first. */
 async function blockToCanvas(block) {
+  // A page the browser is not drawing — the window behind another, or the tab in the
+  // background — lays out and resizes as normal but never paints, so a chart can pass every
+  // check here and still come out blank. The guard below tests the canvas's dimensions,
+  // which are right in that state; only this tells the two apart. Said plainly, because an
+  // empty PNG pasted into a deck is worse than a refusal.
+  if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+    throw new Error("this window was in the background, so the charts had not been drawn — bring it to the front and try again");
+  }
   const charts = Array.from(block.querySelectorAll("canvas"))
     .map(c => (typeof Chart !== "undefined" ? Chart.getChart(c) : null))
     .filter(Boolean);

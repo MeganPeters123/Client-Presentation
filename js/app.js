@@ -954,8 +954,12 @@ function renderAllocationSection() {
   // row read 35.0% here and 36.1% there. Both now come from the same place.
   const total = segSnap.total;
   const listedShown = ltAll ? displayBuckets(ltAll.listed, LISTED_DISPLAY) : null;
+  // magnitude, not value, wherever a weight is tested against the noise floor: an overdrawn
+  // balance is a real negative weight, and dropping it leaves the column reading 100.4% of a
+  // fund. The pie filters negatives out on its own — a donut cannot draw one — but the table
+  // and its total have to carry it, or they disagree with the fund.
   const classRows = listedShown
-    ? ALLOCATION_ORDER.filter(k => (listedShown[k] || 0) > 0.005)
+    ? ALLOCATION_ORDER.filter(k => Math.abs(listedShown[k] || 0) > 0.005)
         .map(k => ({ key: k, weight: listedShown[k], value: (listedShown[k] / 100) * total }))
     : segments.map(x => ({ key: x.category, weight: x.pct, value: x.value }));
 
@@ -972,9 +976,9 @@ function renderAllocationSection() {
   const ltBuckets = hasLT ? displayBuckets(ltAll.buckets) : null;
   const weightOf = (o, k) => (o && o[k]) || 0;
   const rowKeys = ALLOCATION_ORDER.filter(k =>
-    weightOf(listedShown, k) > 0.005 || weightOf(ltBuckets, k) > 0.005);
+    Math.abs(weightOf(listedShown, k)) > 0.005 || Math.abs(weightOf(ltBuckets, k)) > 0.005);
   const keyed = Object.fromEntries(classRows.map(x => [x.key, x]));
-  const cell = v => (v > 0.005 ? v.toFixed(1) + "%" : "—");
+  const cell = v => (Math.abs(v) > 0.005 ? v.toFixed(1) + "%" : "—");
   const sumOf = o => ALLOCATION_ORDER.reduce((t, k) => t + weightOf(o, k), 0);
 
   document.querySelector("#allocationTable thead").innerHTML = `
@@ -1507,7 +1511,7 @@ function renderBreakdownSection() {
   const equityRows = splitCash
     ? bd.rows.map(r => ({ key: r.key,
           weight: r.weight - ((bd.cashByKey || {})[r.key] || 0) - ((bd.bondByKey || {})[r.key] || 0) }))
-        .filter(r => r.weight > 0.005).sort((a, b) => b.weight - a.weight)
+        .filter(r => Math.abs(r.weight) > 0.005).sort((a, b) => b.weight - a.weight)
     : bd.rows;
   const equityTotal = equityRows.reduce((s, r) => s + r.weight, 0);
 
@@ -1516,8 +1520,8 @@ function renderBreakdownSection() {
   // Naming the shortfall keeps the card at 100% instead of quietly ending at 94.6%.
   const unitemised = splitCash ? 100 - (cashTotal + bondTotal + equityTotal) : 0;
   const lead = [];
-  if (splitCash && cashTotal > 0.005) lead.push({ key: "Cash", weight: cashTotal });
-  if (splitCash && bondTotal > 0.005) lead.push({ key: "Fixed Income", weight: bondTotal });
+  if (splitCash && Math.abs(cashTotal) > 0.005) lead.push({ key: "Cash", weight: cashTotal });
+  if (splitCash && Math.abs(bondTotal) > 0.005) lead.push({ key: "Fixed Income", weight: bondTotal });
   if (splitCash && unitemised > 0.05) lead.push({ key: "Not itemised in the export", weight: unitemised });
   const tableRows = splitCash ? [...lead, ...equityRows] : equityRows;
 
