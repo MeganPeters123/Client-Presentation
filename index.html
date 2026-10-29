@@ -167,6 +167,7 @@
       <table class="data-table" id="fundsTable">
         <thead><tr><th>Fund</th><th style="text-align:right;">AUM</th><th style="text-align:right;">% of Total</th><th>As of</th></tr></thead>
         <tbody></tbody>
+        <tfoot></tfoot>
       </table>
     </div>
     <div id="fundTrendWrap" class="chart-wrap" style="display:none; margin-top:18px; height:220px;">
@@ -178,16 +179,15 @@
     <div class="card-head">
       <div>
         <div class="card-title">Compare Periods</div>
-        <div class="card-subtitle">See what changed between two saved months</div>
+        <div class="card-subtitle" id="compareSubtitle">See what changed between two saved months</div>
       </div>
       <div class="funds-controls">
-        <select id="compareFundSelector"></select>
         <select id="comparePeriodA"></select>
         <span class="card-subtitle">vs</span>
         <select id="comparePeriodB"></select>
       </div>
     </div>
-    <div id="compareEmpty" class="empty-hint" style="padding:24px 20px;">Pick two saved periods for the same fund (or "All Funds") to compare.</div>
+    <div id="compareEmpty" class="empty-hint" style="padding:24px 20px;">Pick two saved months to compare.</div>
     <div id="compareBody" style="display:none;">
       <div class="table-scroll">
         <table class="data-table" id="compareTable">
@@ -196,6 +196,7 @@
           <tfoot></tfoot>
         </table>
       </div>
+      <div class="card-subtitle" id="compareBasis" style="padding:10px 2px 0;"></div>
     </div>
   </div>
 
@@ -707,13 +708,13 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="js/data.js?v=aa90985f"></script>
 <script src="js/holdings.js?v=bc26bb55"></script>
-<script src="js/history.js?v=9abbb0c2"></script>
+<script src="js/history.js?v=a000591a"></script>
 <script src="js/lookthrough.js?v=e431cd29"></script>
 <script src="js/cloud.js?v=bf706f5d"></script>
 <script src="js/activeshare.js?v=bafc9435"></script>
 <script src="js/charts.js?v=203dbd25"></script>
 <script src="js/tabs.js?v=e9c7517f"></script>
-<script src="js/app.js?v=94e0d77e"></script>
+<script src="js/app.js?v=05459a88"></script>
 <script src="js/export.js?v=40615ce2"></script>
 </body>
 </html>

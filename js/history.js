@@ -110,18 +110,109 @@ function getFundSnapshotAtOrBefore(fund, monthKey, maxAgeMonths = MAX_CARRY_FORW
   return snap;
 }
 
+/* ---------- consolidating across funds ---------- */
+
+/* Two things stand between a pile of fund snapshots and a figure for the firm.
+ *
+ * The first is currency. The custodian reports each fund in the fund's own base currency
+ * and nowhere says which that is, so the global fund's $110m used to be added to a rand
+ * total as R110m — sixteen times too small. build_history.py now reads the base currency
+ * and the month's rate out of the valuation files themselves (an FX cash line carries both
+ * the amount held and what it is worth, so the line whose value equals its nominal names
+ * the base) and writes them onto the snapshot.
+ *
+ * The second is that the funds own each other. Six mandates hold the global equity fund and
+ * the trust holds the feeder, which holds it in turn, so adding the funds up counts that
+ * money twice and sometimes three times. Each cross-holding comes out once, which leaves
+ * every rand counted at the fund that actually holds the assets — and, as a side effect,
+ * puts the global fund's real mix into the split in place of a single offshore-equity lump.
+ */
+
+/** The segments a consolidated figure is built from; anything else on a holding row is a
+ *  source label that was folded into one of these when the snapshot was built. */
+const CONSOLIDATED_SEGMENTS = new Set([
+  "JSE-listed Equity", "Global-listed Equity", "SA Cash", "Global Cash",
+  "SA Fixed Income", "Global Fixed Income", "SA Property", "Global Property"
+]);
+
+/** The firm's own fund that a holding line is, where one fund holds another. Ticker stems,
+ *  not names — the same holding is written five different ways across the exports. */
+function inHouseFundForHolding(h) {
+  const ticker = String((h && h.ticker) || "").trim();
+  if (!ticker) return null;
+  const hit = IN_HOUSE_FUND_TICKERS.find(([re]) => re.test(ticker));
+  return hit ? hit[1] : null;
+}
+
+/** The segment such a line sits in. A collective investment holding counts as equity, local
+ *  or offshore by the currency it is priced in, which is why the trust's rand-priced feeder
+ *  holding sits in JSE-listed Equity rather than offshore. */
+function segmentForHolding(h) {
+  const cat = String((h && h.category) || "").trim();
+  if (CONSOLIDATED_SEGMENTS.has(cat)) return cat;
+  return isLocalCcy(h && h.ccy) ? "JSE-listed Equity" : "Global-listed Equity";
+}
+
+/** The rand rate for a snapshot: 1 for a rand fund, the month's rate for anything else, and
+ *  null when a foreign fund has no rate to convert by — which leaves it out rather than
+ *  letting its own currency pass as rand. */
+function snapshotZarRate(snap) {
+  const base = String(snap.baseCcy || "ZAR").toUpperCase();
+  if (base === "ZAR") return 1;
+  return snap.zarRate || null;
+}
+
 /** Sums every fund's latest-known snapshot at or before the given month, ignoring funds whose
- *  last snapshot is too old to still count as current (see MAX_CARRY_FORWARD_MONTHS). */
+ *  last snapshot is too old to still count as current (see MAX_CARRY_FORWARD_MONTHS).
+ *
+ *  Also returns what it had to do to get there: `converted` (fund, currency, rate),
+ *  `eliminated` (rand of cross-holdings taken out) and `unpriced` (left out for want of a
+ *  rate), so a consolidated figure can say so rather than just be smaller than the parts. */
 function getConsolidatedAtPeriod(monthKey) {
   const funds = listAllFundsInHistory();
   const included = funds.map(f => getFundSnapshotAtOrBefore(f, monthKey)).filter(Boolean);
-  const total = included.reduce((s, snap) => s + snap.total, 0);
+
+  // Currency-blind history predates the rebuild that records a base currency. Converting
+  // nothing and eliminating nothing is the figure this dashboard has always shown; doing
+  // half the job — netting the cross-holdings while the dollar fund still counts as rand —
+  // would be a new wrong answer rather than an old one, so the flag says which this is.
+  const currencyAware = included.some(s => s.baseCcy);
+
+  const priced = [], unpriced = [], converted = [], eliminations = [];
+  included.forEach(snap => {
+    const rate = currencyAware ? snapshotZarRate(snap) : 1;
+    if (!rate) { unpriced.push({ fund: snap.fund, ccy: snap.baseCcy, total: snap.total }); return; }
+    if (rate !== 1) converted.push({ fund: snap.fund, ccy: snap.baseCcy, rate });
+    priced.push({ snap, rate });
+  });
+  const present = new Set(priced.map(p => p.snap.fund));
+
+  let total = 0;
   const byCategory = new Map();
-  included.forEach(snap => snap.segments.forEach(seg => byCategory.set(seg.category, (byCategory.get(seg.category) || 0) + seg.value)));
+  const add = (category, value) => byCategory.set(category, (byCategory.get(category) || 0) + value);
+
+  priced.forEach(({ snap, rate }) => {
+    total += snap.total * rate;
+    (snap.segments || []).forEach(seg => add(seg.category, seg.value * rate));
+    if (!currencyAware) return;
+    (snap.holdings || []).forEach(h => {
+      const target = inHouseFundForHolding(h);
+      // nothing to take out if the fund it names isn't in the figure in the first place
+      if (!target || target === snap.fund || !present.has(target)) return;
+      const value = (h.value || 0) * rate;
+      total -= value;
+      add(segmentForHolding(h), -value);
+      eliminations.push({ holder: snap.fund, fund: target, value, segment: segmentForHolding(h) });
+    });
+  });
+
   const segments = [...byCategory.entries()]
     .map(([category, value]) => ({ category, value, pct: total ? (value / total) * 100 : 0 }))
     .sort((a, b) => b.value - a.value);
-  return { total, segments, funds: included };
+  return {
+    total, segments, funds: included, currencyAware, converted, unpriced, eliminations,
+    eliminated: eliminations.reduce((s, e) => s + e.value, 0)
+  };
 }
 
 function exportHistoryToFile() {

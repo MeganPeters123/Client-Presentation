@@ -717,15 +717,21 @@ function renderFundsSection() {
   selectedPeriod = periodSel.value;
 
   // table rows: live upload for "Current", else each fund's saved snapshot at-or-before the selected month
-  let rows, total, asOfNote;
+  let rows, total, asOfNote, cons = null;
   if (selectedPeriod === "current") {
     rows = state.holdingsSnapshots.map(s => ({ fund: s.fund, total: s.total, asOf: s.asOf }));
     total = rows.reduce((s, r) => s + r.total, 0);
     const asOfDates = rows.map(r => r.asOf).filter(Boolean);
     asOfNote = asOfDates.length ? (new Set(asOfDates.map(d => d.toDateString())).size === 1 ? "as of " + asOfDates[0].toLocaleDateString() : "as-of dates vary across funds — check before presenting") : "";
   } else {
-    const cons = getConsolidatedAtPeriod(selectedPeriod);
-    rows = cons.funds.map(s => ({ fund: s.fund, total: s.total, asOf: s.asOf }));
+    cons = getConsolidatedAtPeriod(selectedPeriod);
+    // every row in rand: the custodian reports the global fund in dollars, and this column
+    // is the one place its total used to pass as rand and come out sixteen times too small
+    rows = cons.funds.map(s => {
+      const rate = cons.currencyAware ? snapshotZarRate(s) : 1;
+      return { fund: s.fund, total: (s.total || 0) * (rate || 0), asOf: s.asOf,
+               ccy: s.baseCcy, rate, unpriced: !rate };
+    });
     total = cons.total;
     asOfNote = `saved period: ${monthLabelFromKey(selectedPeriod)}`;
   }
@@ -737,11 +743,28 @@ function renderFundsSection() {
   const tbody = document.querySelector("#fundsTable tbody");
   tbody.innerHTML = rows.map(s => `
     <tr>
-      <td>${s.fund}</td>
+      <td>${s.fund}${s.rate && s.rate !== 1
+            ? ` <span style="color:var(--ink-muted);">· ${s.ccy} ${fmtCurrency(s.total / s.rate)} at ${s.rate.toFixed(4)}</span>`
+            : s.unpriced ? ` <span style="color:var(--bad);">· no ${s.ccy} rate</span>` : ""}</td>
       <td class="num">${fmtCurrency(s.total)}</td>
       <td class="num">${total ? (s.total / total * 100).toFixed(1) : "0.0"}%</td>
       <td>${s.asOf ? s.asOf.toLocaleDateString() : "—"}</td>
     </tr>`).join("");
+
+  // The funds do not add up to the firm, and the gap has to be on the page: six mandates
+  // hold the global equity fund and the trust holds the feeder that holds it, so that money
+  // is in two or three of the rows above and can only count once in the total.
+  document.querySelector("#fundsTable tfoot").innerHTML = !cons || !cons.eliminated ? "" : `
+    <tr>
+      <td style="font-weight:400;">Less: held by one fund in another</td>
+      <td class="num delta-down">−${fmtCurrency(cons.eliminated)}</td>
+      <td class="num"></td><td></td>
+    </tr>
+    <tr>
+      <td>Consolidated AUM</td>
+      <td class="num">R ${fmtCurrency(total)}</td>
+      <td class="num">100.0%</td><td></td>
+    </tr>`;
 
   const trendPoints = computeFundTrendPoints();
   const trendWrap = document.getElementById("fundTrendWrap");
@@ -787,26 +810,27 @@ document.getElementById("importHistoryFile").addEventListener("change", async e 
 });
 
 /* ---------- Compare Periods ---------- */
-["compareFundSelector", "comparePeriodA", "comparePeriodB"].forEach(id => {
+["comparePeriodA", "comparePeriodB"].forEach(id => {
   document.getElementById(id).addEventListener("change", renderCompareSection);
 });
 
 /** Pure data computation for the current Compare Periods selection, kept apart from the
- *  rendering so a figure is worked out once. Returns null if not fully configured. */
+ *  rendering so a figure is worked out once. Returns null if not fully configured.
+ *
+ *  Always the consolidated figure: a single fund is what the rest of the tab is for, and
+ *  the same two months were being named three times over to say it. */
 function computeCompareData() {
-  const fund = document.getElementById("compareFundSelector").value || "all";
   const periodA = document.getElementById("comparePeriodA").value;
   const periodB = document.getElementById("comparePeriodB").value;
   if (!periodA || !periodB || periodA === periodB) return null;
 
-  const snapA = fund === "all" ? getConsolidatedAtPeriod(periodA) : getFundSnapshotAtOrBefore(fund, periodA);
-  const snapB = fund === "all" ? getConsolidatedAtPeriod(periodB) : getFundSnapshotAtOrBefore(fund, periodB);
-  if (!snapA || !snapB || !snapA.total || !snapB.total) return null;
+  const consA = getConsolidatedAtPeriod(periodA), consB = getConsolidatedAtPeriod(periodB);
+  if (!consA || !consB || !consA.total || !consB.total) return null;
 
   const labelA = monthLabelFromKey(periodA), labelB = monthLabelFromKey(periodB);
-  const categories = [...new Set([...snapA.segments.map(s => s.category), ...snapB.segments.map(s => s.category)])];
-  const valA = cat => (snapA.segments.find(s => s.category === cat) || {}).value || 0;
-  const valB = cat => (snapB.segments.find(s => s.category === cat) || {}).value || 0;
+  const categories = [...new Set([...consA.segments.map(s => s.category), ...consB.segments.map(s => s.category)])];
+  const valA = cat => (consA.segments.find(s => s.category === cat) || {}).value || 0;
+  const valB = cat => (consB.segments.find(s => s.category === cat) || {}).value || 0;
   // Weights as well as rand. When the fund itself has shrunk every category falls in rand,
   // which says nothing about whether the allocation moved — a category can drop in value
   // and still be a larger share of a smaller fund. The percentage-point change is the one
@@ -814,27 +838,37 @@ function computeCompareData() {
   const rows = categories
     .map(cat => {
       const a = valA(cat), b = valB(cat);
-      const pa = (a / snapA.total) * 100, pb = (b / snapB.total) * 100;
+      const pa = (a / consA.total) * 100, pb = (b / consB.total) * 100;
       return { category: cat, a, b, delta: b - a, pctA: pa, pctB: pb, pctDelta: pb - pa };
     })
     .sort((a, b) => Math.max(b.pctA, b.pctB) - Math.max(a.pctA, a.pctB));
 
-  return { fund, labelA, labelB, totalA: snapA.total, totalB: snapB.total, totalChangePct: ((snapB.total - snapA.total) / snapA.total) * 100, rows };
+  return { labelA, labelB, consA, consB, totalA: consA.total, totalB: consB.total,
+           totalChangePct: ((consB.total - consA.total) / consA.total) * 100, rows };
+}
+
+/** What a consolidated figure had to do to get there, in a line. Worth saying on the card:
+ *  the funds hold one another, so the total is smaller than the funds added up, and a
+ *  figure that is quietly smaller than its parts is the kind nobody can defend. */
+function consolidationBasis(cons) {
+  if (!cons) return "";
+  if (!cons.currencyAware) {
+    return "Funds added up as saved — rebuild the history to convert the dollar fund and take "
+         + "out the funds' holdings of one another.";
+  }
+  const parts = [`${cons.funds.length} funds`];
+  if (cons.eliminated) parts.push(`less R ${fmtCurrency(cons.eliminated)} held in one another`);
+  cons.converted.forEach(c => parts.push(`${c.fund} at ${c.ccy}/ZAR ${c.rate.toFixed(4)}`));
+  cons.unpriced.forEach(u => parts.push(`${u.fund} left out — no ${u.ccy} rate`));
+  return parts.join(" · ");
 }
 
 function renderCompareSection() {
   const card = document.getElementById("compareCard");
-  const funds = listAllFundsInHistory();
-  if (!funds.length) { card.style.display = "none"; return; }
+  if (!listAllFundsInHistory().length) { card.style.display = "none"; return; }
   card.style.display = "block";
 
-  const fundSel = document.getElementById("compareFundSelector");
-  const prevFund = fundSel.value || "all";
-  fundSel.innerHTML = `<option value="all">All Funds (Consolidated)</option>` + funds.map(f => `<option value="${f.replace(/"/g, "&quot;")}">${f}</option>`).join("");
-  fundSel.value = ["all", ...funds].includes(prevFund) ? prevFund : "all";
-  const compareFund = fundSel.value;
-
-  const months = compareFund === "all" ? listAllPeriodMonths() : listPeriodsForFund(compareFund).map(s => s.period);
+  const months = listAllPeriodMonths();
   const selA = document.getElementById("comparePeriodA"), selB = document.getElementById("comparePeriodB");
   const prevA = selA.value, prevB = selB.value;
   const opts = `<option value="">— select —</option>` + months.map(m => `<option value="${m}">${monthLabelFromKey(m)}</option>`).join("");
@@ -844,10 +878,12 @@ function renderCompareSection() {
 
   const empty = document.getElementById("compareEmpty"), body = document.getElementById("compareBody");
   const data = computeCompareData();
+  document.getElementById("compareSubtitle").textContent =
+    "What changed across every fund, consolidated";
   if (!data) {
     empty.textContent = !selA.value || !selB.value
-      ? `Pick two saved periods for ${compareFund === "all" ? "the consolidated total" : compareFund} to compare.`
-      : selA.value === selB.value ? "Pick two different periods to compare." : "No comparable data for that selection.";
+      ? "Pick two saved months to compare."
+      : selA.value === selB.value ? "Pick two different months to compare." : "No comparable data for that selection.";
     empty.style.display = "block"; body.style.display = "none";
     return;
   }
@@ -855,6 +891,8 @@ function renderCompareSection() {
 
   document.getElementById("compareColA").textContent = data.labelA;
   document.getElementById("compareColB").textContent = data.labelB;
+  document.getElementById("compareBasis").textContent = consolidationBasis(data.consB);
+
   document.querySelector("#compareTable tbody").innerHTML = data.rows.map(r => `
     <tr>
       <td>${r.category}</td>

@@ -44,6 +44,10 @@ CONFIG_PATH = Path(__file__).parent / "config.json"
 # A futures or option line, whose market value never describes what it is exposed to.
 DERIVATIVE_CATEGORY = re.compile(r"derivativ|future|option", re.I)
 
+# An FX cash line: the ticker is the currency code itself, and the line sits in cash.
+CCY_CODE = re.compile(r"^[A-Z]{3}$")
+CASH_CATEGORY = re.compile(r"cash", re.I)
+
 FILENAME_DATE_PATTERNS = [
     re.compile(r"(\d{4})\.(\d{2})\.(\d{2})"),          # 2026.08.31 - Balanced.XLS
     re.compile(r"_(\d{4})(\d{2})(\d{2})(?:[._]|$)"),   # ADMIN_D_00000_IPD_Daily_20260831.xls
@@ -373,6 +377,106 @@ def report_categories(best, unmapped):
             print(f"   {cat}")
 
 
+def fx_lines(snap):
+    """{currency code: value per unit} for the snapshot's FX cash lines.
+
+    A cash line in a foreign currency carries both the amount held and what it is worth,
+    so the ratio between them is that day's rate against whatever the fund reports in.
+    """
+    out = {}
+    for h in snap.get("holdings", []):
+        code = (h.get("ticker") or "").strip().upper()
+        if not CCY_CODE.match(code) or not CASH_CATEGORY.search(h.get("category") or ""):
+            continue
+        nominal, value = h.get("nominal"), h.get("value")
+        if not nominal or value is None:
+            continue
+        # A wound-up currency leaves a rump behind — one cent of Mexican peso, where the
+        # amount held and what it is worth are the same cent. That is a rounding artefact
+        # reading as a 1:1 rate, and it named the hedge fund a peso fund until it was cut.
+        if abs(value) < 1000:
+            continue
+        out[code] = value / nominal
+    return out
+
+
+def resolve_currencies(best):
+    """Give every snapshot the currency it is reported in and the rate that converts it.
+
+    The custodian reports each fund in the fund's own base currency and nowhere says which
+    that is, so a dollar fund's total reads like rand and lands in a consolidated figure
+    sixteen times too small. It is in the file all the same: the FX cash line whose value
+    equals its nominal is the one the fund reports in, and the rest are that day's rates
+    against it. A rand fund's dollar line is therefore the month's USD/ZAR, which is what
+    converts the dollar fund — no rate feed, and the rate is the custodian's own.
+
+    Returns (rates by month, snapshots with no FX line to go on). The latter are taken as
+    rand: every mandate here is but one, and the flat-file formats carry no nominal.
+    """
+    rates = {}      # month -> {code: zar per unit}
+    assumed, ambiguous = [], []
+    for (fund, key), snap in sorted(best.items()):
+        lines = fx_lines(snap)
+        # Rand first: a rand fund holding a currency that happens to trade near parity
+        # would otherwise be named by whichever line the custodian listed first.
+        unit = [c for c, r in lines.items() if abs(r - 1.0) < 1e-6]
+        base = "ZAR" if "ZAR" in unit else unit[0] if len(unit) == 1 else None
+        if len(unit) > 1 and base != "ZAR":
+            ambiguous.append((fund, key, ",".join(sorted(unit))))
+        if base is None:
+            snap["baseCcy"] = "ZAR"
+            assumed.append((fund, key))
+            continue
+        snap["baseCcy"] = base
+        if base == "ZAR":
+            for code, rate in lines.items():
+                rates.setdefault(key, {}).setdefault(code, []).append(rate)
+
+    # One house rate per currency per month: the funds agree to six decimals, so a spread
+    # here means a file from the wrong day, and the median keeps one odd one out harmless.
+    for key, by_code in rates.items():
+        rates[key] = {code: sorted(vals)[len(vals) // 2] for code, vals in by_code.items()}
+
+    unconverted = []
+    for (fund, key), snap in sorted(best.items()):
+        base = snap["baseCcy"]
+        if base == "ZAR":
+            snap["zarRate"] = 1.0
+            continue
+        rate = (rates.get(key) or {}).get(base)
+        if rate is None:      # fall back to the nearest month that has one
+            near = sorted((abs(month_distance(key, k)), k) for k, v in rates.items() if base in v)
+            if near:
+                rate = rates[near[0][1]][base]
+                snap["zarRateFrom"] = near[0][1]
+        snap["zarRate"] = rate
+        if rate is None:
+            unconverted.append((fund, key, base))
+    return rates, assumed, unconverted, ambiguous
+
+
+def month_distance(a, b):
+    ya, ma = int(a[:4]), int(a[5:7])
+    yb, mb = int(b[:4]), int(b[5:7])
+    return (ya * 12 + ma) - (yb * 12 + mb)
+
+
+def report_currencies(best, rates, assumed, unconverted, ambiguous):
+    foreign = sorted({(s["fund"], s["baseCcy"]) for s in best.values() if s.get("baseCcy") != "ZAR"})
+    if not foreign and not unconverted and not ambiguous:
+        return
+    print("\n" + "-" * 78)
+    print("Reported in a currency other than rand:")
+    for fund, ccy in foreign:
+        months = sorted(k for (f, k) in best if f == fund)
+        shown = [f"{k} @ {(rates.get(k) or {}).get(ccy) or 0:.4f}" for k in months[-3:]]
+        print(f"   {fund:38} {ccy}   {', '.join(shown)}")
+    if unconverted:
+        print(f"\n   {len(unconverted)} snapshot(s) have no rate for their currency and will be left out")
+        for fund, key, ccy in unconverted[:10]:
+            print(f"      {fund} {key} ({ccy})")
+
+
 def holding_row(h):
     """One position, kept lean — this is ~60 rows per fund per month and would otherwise
     dominate the file.
@@ -414,6 +518,10 @@ def write_history(best, out_path):
             # position level, for Top 10 Holdings and Portfolio Changes. Kept lean — this is
             # ~60 rows per fund per month and would otherwise dominate the file.
             "holdings": [holding_row(h) for h in snap.get("holdings", [])],
+            # the currency the custodian reports this fund in, and the rand rate that
+            # converts it — a consolidated total mixes funds and has to speak one currency
+            "baseCcy": snap.get("baseCcy", "ZAR"),
+            "zarRate": snap.get("zarRate"),
             "source": snap["source"],
             "format": snap["format"],
             "savedAt": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
@@ -462,6 +570,8 @@ def main():
     ap.add_argument("--lookahead-days", type=int, default=5,
                     help="How many days after month-end to consider (default 5 — some exports are written the next business day)")
     ap.add_argument("--dry-run", action="store_true", help="Report only, don't write the history file")
+    ap.add_argument("--out", help="Write to this file instead of the configured one, and leave Supabase "
+                                  "alone — for checking a change before it touches the real history")
     ap.add_argument("--archive", action="store_true", help="Also copy the source files used into the archive folder")
     ap.add_argument("--quiet", action="store_true", help="Don't list every file as it's parsed")
     args = ap.parse_args()
@@ -471,7 +581,9 @@ def main():
     print(f"Building history for {len(months)} month(s): {months[0]} .. {months[-1]}\n")
 
     best, problems, unmapped, below_floor = build(config, months, args.lookback_days, args.lookahead_days, verbose=not args.quiet)
+    rates, assumed, unconverted, ambiguous = resolve_currencies(best)
     report(best, months)
+    report_currencies(best, rates, assumed, unconverted, ambiguous)
     report_categories(best, unmapped)
     report_below_floor(below_floor, config)
     report_implausible(best)
@@ -488,14 +600,16 @@ def main():
         print(f"\nDry run — nothing written. Would have written {len(best)} snapshot(s).")
         return
 
-    out_path = Path(config["output"])
+    out_path = Path(args.out or config["output"])
     count = write_history(best, out_path)
     print(f"\nWrote {count} snapshot(s) to {out_path}")
 
     # The file above stays the system of record; this is a copy the dashboard can read
     # without being imported. Re-read rather than re-serialise, so what goes up is exactly
     # what went to disk. A failure here reports and leaves the file untouched.
-    if supabase_push.configured(config):
+    if args.out:
+        print("Side file — Supabase untouched. Import it in the dashboard to check it.")
+    elif supabase_push.configured(config):
         with open(out_path, "r", encoding="utf-8") as fh:
             written = json.load(fh)
         supabase_push.push(config, periods=written.get("periods"), trades=written.get("trades"))
