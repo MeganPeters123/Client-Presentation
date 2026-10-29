@@ -90,8 +90,10 @@ function parseCustodianHtmlHoldings(text, fileName) {
   flat.filter(r => r.level === 2 && r.rowClass === "cLink").forEach(r => {
     const split = localForeignByClass[r.label.trim()] || { local: 0, foreign: 0 };
     const label = titleCase(r.label);
-    if (split.local > 0.005) segments.push({ category: localForeignLabel(label, "local"), value: (split.local / 100) * fundTotal });
-    if (split.foreign > 0.005) segments.push({ category: localForeignLabel(label, "foreign"), value: (split.foreign / 100) * fundTotal });
+    // abs, not >: an overdrawn balance is real money, and a bare > dropped that side
+    // altogether — see the note in scripts/holdings_parsers.py, which parses the same files.
+    if (Math.abs(split.local) > 0.005) segments.push({ category: localForeignLabel(label, "local"), value: (split.local / 100) * fundTotal });
+    if (Math.abs(split.foreign) > 0.005) segments.push({ category: localForeignLabel(label, "foreign"), value: (split.foreign / 100) * fundTotal });
   });
 
   let asOf = null;

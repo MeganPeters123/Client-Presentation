@@ -212,7 +212,11 @@ def parse_custodian_html(path):
         split = split_by_class.get(r["label"].strip(), {"local": 0.0, "foreign": 0.0})
         label = title_case(r["label"])
         for side in ("local", "foreign"):
-            if split[side] > 0.005:
+            # abs, not >. An overdrawn balance is real money: the global fund ran its rand
+            # cash at -0.42% of the fund in February 2025, and a bare > dropped that side
+            # altogether, leaving the categories adding up to 100.42% of a fund and, once
+            # converted, R7.7m more than the fund held. A negative side is kept as negative.
+            if abs(split[side]) > 0.005:
                 segments.append({
                     "category": local_foreign_label(label, side),
                     "value": (split[side] / 100.0) * fund_total,
