@@ -8,6 +8,7 @@ Usage:
     python build_history.py --from 2025-07 --to 2026-08
     python build_history.py --from 2026-08 --to 2026-08 --dry-run
     python build_history.py --from 2025-07 --to 2026-08 --archive
+    python build_history.py --from 2024-09 --to 2026-09 --out side.json   # check, don't publish
 
 The written file holds exactly the months in the range and nothing else — it is not
 merged into what is already there. To add one month, give the whole span ending at it,
