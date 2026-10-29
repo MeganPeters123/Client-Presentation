@@ -48,6 +48,14 @@ def _send(url, key, path, rows, on_conflict, label):
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")[:300]
             print(f"   {label}: stopped after {sent} of {len(rows)} — HTTP {e.code} {detail}")
+            # A column the table has not got is the one failure with an obvious next step,
+            # and the raw PostgREST message does not say what to do about it.
+            for column, script in (("base_ccy", "supabase_currency.sql"),
+                                   ("zar_rate", "supabase_currency.sql"),
+                                   ("by_security", "supabase_trade_securities.sql")):
+                if column in detail:
+                    print(f"      run scripts/{script} in the Supabase SQL editor, then try again")
+                    break
             return sent, False
         except Exception as e:                                   # network, DNS, timeout
             print(f"   {label}: stopped after {sent} of {len(rows)} — {e}")
@@ -80,6 +88,11 @@ def push(config, periods=None, trades=None):
                 "holdings": snap.get("holdings") or [],
                 "source": snap.get("source"),
                 "format": snap.get("format"),
+                # The dashboard reads these from here, not from the file, so a column left
+                # out here is a figure the dashboard cannot work out — it read every fund as
+                # rand for as long as these were missing. Needs scripts/supabase_currency.sql.
+                "base_ccy": snap.get("baseCcy") or "ZAR",
+                "zar_rate": snap.get("zarRate"),
             })
         sent, good = _send(url, key, "snapshots", rows, "fund,period", "snapshots")
         print(f"   snapshots      {sent} of {len(rows)}")

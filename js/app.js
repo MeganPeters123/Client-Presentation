@@ -853,8 +853,9 @@ function computeCompareData() {
 function consolidationBasis(cons) {
   if (!cons) return "";
   if (!cons.currencyAware) {
-    return "Funds added up as saved — rebuild the history to convert the dollar fund and take "
-         + "out the funds' holdings of one another.";
+    return "Funds added up as saved, with no currency recorded against them — run "
+         + "scripts/supabase_currency.sql, then build_history.py, to convert the dollar fund "
+         + "and take out the funds' holdings of one another.";
   }
   const parts = [`${cons.funds.length} funds`];
   if (cons.eliminated) parts.push(`less R ${fmtCurrency(cons.eliminated)} held in one another`);

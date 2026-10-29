@@ -84,6 +84,16 @@ async function cloudLoadHistory() {
       total: Number(r.total),
       segments: r.segments || [],
       holdings: r.holdings || [],
+      // The currency the fund is reported in and the rand rate for it. This row is built
+      // field by field, so a field not named here is one the dashboard never sees however
+      // faithfully the ETL wrote it — these two were missing, and every consolidated figure
+      // read as though every fund were rand. Absent until supabase_currency.sql has been run.
+      // left undefined where the column is not there yet, never defaulted to rand: the
+      // dashboard tells "no currency recorded" from "recorded as rand" by this field alone,
+      // and defaulting it would have it take the dollar fund's total for rand while also
+      // taking out the funds' holdings of one another — a worse figure than before, quietly.
+      baseCcy: r.base_ccy == null ? undefined : r.base_ccy,
+      zarRate: r.zar_rate == null ? null : Number(r.zar_rate),
       source: r.source,
       format: r.format,
       savedAt: r.saved_at ? new Date(r.saved_at) : null
