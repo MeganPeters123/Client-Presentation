@@ -176,7 +176,12 @@ function getConsolidatedAtPeriod(monthKey) {
   // nothing and eliminating nothing is the figure this dashboard has always shown; doing
   // half the job — netting the cross-holdings while the dollar fund still counts as rand —
   // would be a new wrong answer rather than an old one, so the flag says which this is.
-  const currencyAware = included.some(s => s.baseCcy);
+  // A rate, not just a currency. The migration that adds the columns defaults base_ccy to
+  // 'ZAR' on the rows already there, which reads exactly like a fund genuinely reported in
+  // rand — so between running the script and rebuilding, the dollar fund would have counted
+  // as rand while the cross-holdings came out: R19.7bn, worse than the figure it replaced.
+  // Every row gets a rate in the rebuild, 1 for a rand fund, so this waits for that.
+  const currencyAware = included.some(s => s.baseCcy && s.zarRate != null);
 
   const priced = [], unpriced = [], converted = [], eliminations = [];
   included.forEach(snap => {
