@@ -766,13 +766,18 @@ function renderFundsSection() {
       <td class="num">100.0%</td><td></td>
     </tr>`;
 
+  // The trend is its own step, heading and all: one card holding a scrolling table of
+  // eighteen funds with a chart pressed underneath it was a lot to take in at once, and as
+  // two steps each can be copied on its own as well.
   const trendPoints = computeFundTrendPoints();
-  const trendWrap = document.getElementById("fundTrendWrap");
+  const trendStep = document.getElementById("fundTrendStep");
   if (trendPoints.length >= 2) {
-    trendWrap.style.display = "block";
+    trendStep.style.display = "block";
+    document.getElementById("fundTrendSub").textContent =
+      `${trendPoints[0].label} – ${trendPoints[trendPoints.length - 1].label} · every fund at its latest saved figure`;
     renderFundTrendChart(trendPoints);
   } else {
-    trendWrap.style.display = "none";
+    trendStep.style.display = "none";
   }
 
   renderCompareSection();

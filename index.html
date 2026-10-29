@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aylett & Co — AUM Dashboard</title>
-<link rel="stylesheet" href="css/style.css?v=e962a824">
+<link rel="stylesheet" href="css/style.css?v=ed0e2cd3">
 </head>
 <body>
 
@@ -157,7 +157,6 @@
     <div class="card-head">
       <div>
         <div class="card-title">Funds Under Management</div>
-        <div class="card-subtitle" id="fundsSubtitle">Consolidated across every fund holdings file loaded</div>
       </div>
       <div class="funds-controls">
         <select id="fundSelector"></select>
@@ -168,15 +167,34 @@
         </button>
       </div>
     </div>
-    <div class="table-scroll">
-      <table class="data-table" id="fundsTable">
-        <thead><tr><th>Fund</th><th style="text-align:right;">AUM</th><th style="text-align:right;">% of Total</th><th>As of</th></tr></thead>
-        <tbody></tbody>
-        <tfoot></tfoot>
-      </table>
+    <div class="flow-step">
+      <div class="step-head">
+        <span class="step-num">1</span>
+        <div>
+          <div class="step-title">What each fund holds</div>
+          <div class="step-sub" id="fundsSubtitle">Consolidated across every fund holdings file loaded</div>
+        </div>
+      </div>
+      <div class="table-scroll funds-table">
+        <table class="data-table" id="fundsTable">
+          <thead><tr><th>Fund</th><th style="text-align:right;">AUM</th><th style="text-align:right;">% of Total</th><th>As of</th></tr></thead>
+          <tbody></tbody>
+          <tfoot></tfoot>
+        </table>
+      </div>
     </div>
-    <div id="fundTrendWrap" class="chart-wrap" style="display:none; margin-top:18px; height:220px;">
-      <canvas id="fundTrendChart"></canvas>
+
+    <div class="flow-step" id="fundTrendStep" style="display:none;">
+      <div class="step-head">
+        <span class="step-num">2</span>
+        <div>
+          <div class="step-title">How the total has moved</div>
+          <div class="step-sub" id="fundTrendSub">Month by month, every fund at its latest saved figure</div>
+        </div>
+      </div>
+      <div id="fundTrendWrap" class="chart-wrap" style="height:260px;">
+        <canvas id="fundTrendChart"></canvas>
+      </div>
     </div>
   </div>
 
@@ -719,7 +737,7 @@
 <script src="js/activeshare.js?v=bafc9435"></script>
 <script src="js/charts.js?v=203dbd25"></script>
 <script src="js/tabs.js?v=e9c7517f"></script>
-<script src="js/app.js?v=559c4cde"></script>
+<script src="js/app.js?v=454ffa2c"></script>
 <script src="js/export.js?v=8ea64502"></script>
 </body>
 </html>

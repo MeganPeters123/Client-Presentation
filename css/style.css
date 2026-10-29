@@ -175,6 +175,9 @@ table.data-table tr:hover td{ background:var(--surface-2); }
 .stale-bar .btn{ margin-left:auto; }
 table.data-table tfoot td{ border-top:1.5px solid var(--border); border-bottom:none; font-weight:650; color:var(--ink); padding-top:9px; }
 .table-scroll{ overflow-x:auto; max-height:420px; overflow-y:auto; }
+/* the funds list is one row per mandate and stops there, so it is given the room to
+   show them all rather than a scrollbar inside a card that already scrolls */
+.table-scroll.funds-table{ max-height:none; }
 .chip{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:650; }
 .chip.buy{ background:rgba(0,131,0,0.12); color:var(--good); }
 .chip.sell{ background:rgba(208,59,59,0.12); color:var(--bad); }
