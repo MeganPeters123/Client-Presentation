@@ -855,12 +855,6 @@ function renderCompareSection() {
 
   document.getElementById("compareColA").textContent = data.labelA;
   document.getElementById("compareColB").textContent = data.labelB;
-  document.getElementById("compareKpiRow").innerHTML = `
-    <div class="kpi"><div class="label">${data.labelA} AUM</div><div class="value">R ${fmtCurrency(data.totalA)}</div></div>
-    <div class="kpi"><div class="label">${data.labelB} AUM</div><div class="value">R ${fmtCurrency(data.totalB)}</div></div>
-    <div class="kpi"><div class="label">Change</div><div class="value">${(data.totalChangePct >= 0 ? "+" : "") + data.totalChangePct.toFixed(1)}%</div>
-      <div class="delta ${data.totalChangePct >= 0 ? "up" : "down"}">R ${fmtCurrency(data.totalB - data.totalA)}</div></div>`;
-
   document.querySelector("#compareTable tbody").innerHTML = data.rows.map(r => `
     <tr>
       <td>${r.category}</td>
@@ -869,6 +863,19 @@ function renderCompareSection() {
       <td class="num ${r.pctDelta > 0.05 ? "delta-up" : r.pctDelta < -0.05 ? "delta-down" : ""}">${r.pctDelta > 0 ? "+" : ""}${r.pctDelta.toFixed(1)}</td>
       <td class="num" style="color:var(--ink-muted);">${r.delta > 0 ? "+" : ""}${fmtCurrency(r.delta)}</td>
     </tr>`).join("");
+
+  // The fund's own size sits as the total row rather than in cards above the table: the
+  // months are already named in the column heads, and this way the totals travel with a
+  // table-only export instead of being left behind.
+  const totalDelta = data.totalB - data.totalA;
+  document.querySelector("#compareTable tfoot").innerHTML = `
+    <tr>
+      <td>Total AUM</td>
+      <td class="num">R ${fmtCurrency(data.totalA)}</td>
+      <td class="num">R ${fmtCurrency(data.totalB)}</td>
+      <td class="num ${data.totalChangePct > 0.05 ? "delta-up" : data.totalChangePct < -0.05 ? "delta-down" : ""}">${data.totalChangePct > 0 ? "+" : ""}${data.totalChangePct.toFixed(1)}%</td>
+      <td class="num" style="color:var(--ink-muted);">${totalDelta > 0 ? "+" : ""}${fmtCurrency(totalDelta)}</td>
+    </tr>`;
 }
 
 /* ---------- Allocation section ---------- */
