@@ -275,10 +275,36 @@ function listHoldingMonthsForFund(fund) {
  *  both. Active share already compared on this basis; the holdings lists now agree with it.
  *
  *  resolveIssuer lives in activeshare.js, which loads after this file. */
+/** Offshore shares as one export identifies them: by SEDOL, where every other source uses
+ *  the ticker. The same company then ranked twice in one table — one mandate's Tencent
+ *  beside everyone else's, two companies as far as the key was concerned, in Top 10
+ *  Holdings, Portfolio Changes and Top Buys & Sells alike.
+ *
+ *  Every pair here was confirmed on the ISIN that both files carry, not on the names, which
+ *  is what keeps the two Melcos apart: B092QP3 is Melco International in Hong Kong and
+ *  B1KYHF2 is the Melco Resorts ADR in New York — different companies, alike enough in name
+ *  to have been merged by anything less exact. A SEDOL belongs to one security for good, so
+ *  these do not go stale; a new one needs the same ISIN check before it is added. */
+const SEDOL_TICKERS = {
+  "B039445": "DELFI SP",    // Delfi Ltd
+  "B092QP3": "200 HK",      // Melco International Development
+  "B156T57": "SBMO NA",     // SBM Offshore NV
+  "B1KYHF2": "MLCO UW",     // Melco Resorts & Entertainment, the ADR
+  "B5B1S13": "DG UN",       // Dollar General Corp
+  "BDT88L2": "RUI FP",      // Rubis SCA
+  "BJV2ZZ7": "XPEL UR",     // XPEL Inc
+  "BMMV2K8": "700 HK",      // Tencent Holdings
+  "BNZGVV1": "UMG NA",      // Universal Music Group NV
+  "BWZMZF4": "FLUT UN",     // Flutter Entertainment PLC
+  "BYM4063": "CUERVO MF"    // Becle SAB de CV
+};
+
 function holdingKey(h) {
-  const issuer = typeof resolveIssuer === "function" ? resolveIssuer(h.ticker, h.name) : null;
+  const given = String(h.ticker == null ? "" : h.ticker).trim().toUpperCase();
+  const ticker = SEDOL_TICKERS[given] || h.ticker;
+  const issuer = typeof resolveIssuer === "function" ? resolveIssuer(ticker, h.name) : null;
   if (issuer) return issuer;
-  return hkNormalised((h.ticker || h.name || "").trim().toUpperCase());
+  return hkNormalised((ticker || h.name || "").trim().toUpperCase());
 }
 
 /** A Hong Kong code arrives spaced from one export and run together from another, which
