@@ -1490,12 +1490,19 @@ function renderActiveShareSection() {
       ? `The ${shownRows.length} widest gaps between the fund and the index, of ${latest.rows.length}`
       : "The widest gaps between the fund and the index";
 
+  // Not coloured. Green and red say good and bad, and an overweight is neither: it is the
+  // position the fund has taken, which is the whole point of measuring active share. Every
+  // row used to be one or the other, with no neutral band and a holding exactly at index
+  // weight printed in red. The sign carries the direction, the sort carries the size.
+  // one minus sign down the table: the fund column can go negative on a futures offset, and
+  // a hyphen beside a typographic minus in the next column looks like two different things
+  const weight = v => (v < 0 ? "−" : "") + Math.abs(v).toFixed(2);
   document.querySelector("#activeShareTable tbody").innerHTML = shownRows.map(r => `
     <tr>
       <td>${r.share}</td>
-      <td class="num">${r.fund ? r.fund.toFixed(2) : "—"}</td>
-      <td class="num">${r.bench ? r.bench.toFixed(2) : "—"}</td>
-      <td class="num ${r.active > 0 ? "delta-up" : "delta-down"}">${r.active > 0 ? "+" : ""}${r.active.toFixed(2)}</td>
+      <td class="num">${r.fund ? weight(r.fund) : "—"}</td>
+      <td class="num">${r.bench ? weight(r.bench) : "—"}</td>
+      <td class="num" title="${r.active > 0 ? "Overweight" : r.active < 0 ? "Underweight" : "At index weight"} by ${Math.abs(r.active).toFixed(2)} points">${r.active > 0 ? "+" : ""}${weight(r.active)}</td>
     </tr>`).join("");
 
   // the index column shows when the monthly file landed, which is information, not a fault:
