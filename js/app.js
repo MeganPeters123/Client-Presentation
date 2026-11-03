@@ -2248,6 +2248,21 @@ function renderAll() {
 
 renderAll();
 
+// The saved history is read out of IndexedDB, which is asynchronous: this first paint is of
+// whatever was already in memory (nothing, on a normal load), and the store arrives a moment
+// later. Only render again if it actually brought something, so a browser with no saved
+// history does not draw itself twice for nothing.
+hydrateHistoryFromDb()
+  .then(hydrated => {
+    if (!hydrated) return;
+    renderAll();
+    // the out-of-date banner compares the newest snapshot here against the newest centrally,
+    // and until this point there was nothing here to compare — it would have read as a
+    // browser with no history at all
+    if (typeof checkCloudHistoryFresh === "function") checkCloudHistoryFresh();
+  })
+  .catch(e => console.error("Could not restore the saved history", e));
+
 /* ---------- saved history, read from Supabase ---------- */
 
 /** The newest snapshot in this browser's copy, which is what the dashboard is drawing from. */

@@ -14,16 +14,76 @@ function monthLabelFromKey(key) {
   return new Date(y, m - 1, 1).toLocaleDateString(undefined, { year: "numeric", month: "short" });
 }
 
+/* Where the saved history lives.
+ *
+ * It used to live in localStorage, which browsers cap at about 5MB a site. At roughly 8.5KB
+ * a fund-month that was 3.2MB for 380 snapshots and a wall about a year out — and hitting it
+ * is quiet: the write throws, the figures on screen stay right, and the next refresh comes up
+ * empty until Load latest is pressed again. IndexedDB has no such cap (the browser hands out
+ * hundreds of MB and asks the user before it runs out), so that is where the history sits.
+ *
+ * Two things follow. IndexedDB is read asynchronously, so the store is empty for an instant
+ * at startup and hydrateHistoryFromDb fills it and re-renders. And a browser that cannot open
+ * a database at all still works exactly as before: every path falls back to localStorage.
+ */
+const HISTORY_DB_NAME = "aum-dashboard";
+const HISTORY_DB_STORE = "history";
+const HISTORY_DB_KEY = "v1";
+
+function historyDbAvailable() {
+  try { return typeof indexedDB !== "undefined" && indexedDB !== null; } catch (e) { return false; }
+}
+
+function openHistoryDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(HISTORY_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(HISTORY_DB_STORE)) db.createObjectStore(HISTORY_DB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error("could not open the local database"));
+    req.onblocked = () => reject(new Error("another tab is holding the local database open"));
+  });
+}
+
+/** One transaction, closed whichever way it ends — an open connection blocks the next
+ *  version change, and a tab that never closes one is a tab that cannot be upgraded. */
+function historyDbRun(mode, fn) {
+  return openHistoryDb().then(db => new Promise((resolve, reject) => {
+    let request;
+    const tx = db.transaction(HISTORY_DB_STORE, mode);
+    try {
+      request = fn(tx.objectStore(HISTORY_DB_STORE));
+    } catch (e) {
+      try { tx.abort(); } catch (ignored) {}
+      db.close();
+      reject(e);
+      return;
+    }
+    tx.oncomplete = () => { db.close(); resolve(request ? request.result : undefined); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+    tx.onabort = () => { db.close(); reject(tx.error || new Error("the write was aborted")); };
+  }));
+}
+
+/** The stored form back into the working one: dates are written as strings and every reader
+ *  downstream expects Date objects. */
+function reviveHistoryStore(parsed) {
+  const periods = {};
+  Object.entries((parsed && parsed.periods) || {}).forEach(([key, snap]) => {
+    periods[key] = { ...snap, asOf: snap.asOf ? new Date(snap.asOf) : null, savedAt: snap.savedAt ? new Date(snap.savedAt) : null };
+  });
+  return { periods, trades: (parsed && parsed.trades) || {} };
+}
+
+/** Whatever localStorage still holds: an older copy from before the move, or the fallback
+ *  this browser is using because it has no IndexedDB. Empty is the normal answer now. */
 function loadHistoryStore() {
   try {
     const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
     if (!raw) return { periods: {}, trades: {} };
-    const parsed = JSON.parse(raw);
-    const periods = {};
-    Object.entries(parsed.periods || {}).forEach(([key, snap]) => {
-      periods[key] = { ...snap, asOf: snap.asOf ? new Date(snap.asOf) : null, savedAt: snap.savedAt ? new Date(snap.savedAt) : null };
-    });
-    return { periods, trades: parsed.trades || {} };
+    return reviveHistoryStore(JSON.parse(raw));
   } catch (e) {
     console.error("Could not read saved history", e);
     return { periods: {}, trades: {} };
@@ -38,14 +98,76 @@ function serializeHistoryStore() {
   return out;
 }
 
-function persistHistoryStore() {
+function persistToLocalStorage(payload) {
   try {
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(serializeHistoryStore()));
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(payload));
     return true;
   } catch (e) {
+    // the old failure, now only reachable where there is no database to fall back from
     console.error("Could not save history locally", e);
+    if (typeof showToast === "function") {
+      showToast("This browser is out of room for the saved history. What is on screen is fine, "
+              + "but a refresh will need Load latest again.");
+    }
     return false;
   }
+}
+
+// Writes go one at a time and in the order asked for: two saves racing on the same key would
+// otherwise leave whichever finished last, not whichever was asked for last.
+let historyWriteChain = Promise.resolve();
+let historySavedHere = false;      // something was saved in this tab since the page opened
+
+/** The database is the copy that counts, so anything still sitting in localStorage under the
+ *  old key is dead weight against the 5MB the smaller stores share. Cleared on every
+ *  successful write rather than once, since a spell on the fallback route puts it back. */
+function clearLegacyLocalCopy() {
+  try { if (localStorage.getItem(HISTORY_STORAGE_KEY) !== null) localStorage.removeItem(HISTORY_STORAGE_KEY); } catch (e) {}
+}
+
+function persistHistoryStore() {
+  const payload = serializeHistoryStore();
+  historySavedHere = true;
+  if (!historyDbAvailable()) return persistToLocalStorage(payload);
+  historyWriteChain = historyWriteChain
+    .then(() => historyDbRun("readwrite", store => store.put(payload, HISTORY_DB_KEY)))
+    .then(clearLegacyLocalCopy)
+    .catch(e => {
+      console.error("Could not save the history to the local database", e);
+      persistToLocalStorage(payload);                 // cap and all, better than nothing
+    });
+  return true;
+}
+
+/** Reads the store back out at startup. Returns true when it put something on screen, so the
+ *  caller knows to render again.
+ *
+ *  Anything saved in this tab since the page opened wins: the read is asynchronous, and a
+ *  Load latest that landed first must not be undone by a copy that was already stale. */
+async function hydrateHistoryFromDb() {
+  if (!historyDbAvailable()) return false;
+  let stored = null;
+  try {
+    stored = await historyDbRun("readonly", store => store.get(HISTORY_DB_KEY));
+  } catch (e) {
+    console.error("Could not read the saved history from the local database", e);
+    return false;
+  }
+  if (historySavedHere) return false;
+  if (stored) {
+    historyStore = reviveHistoryStore(stored);
+    clearLegacyLocalCopy();
+    return true;
+  }
+  // nothing in the database yet: move this browser's existing copy in and give the 5MB back
+  if (!Object.keys(historyStore.periods || {}).length && !Object.keys(historyStore.trades || {}).length) return false;
+  try {
+    await historyDbRun("readwrite", store => store.put(serializeHistoryStore(), HISTORY_DB_KEY));
+    clearLegacyLocalCopy();
+  } catch (e) {
+    console.error("Could not move the saved history into the local database", e);
+  }
+  return false;
 }
 
 let historyStore = loadHistoryStore();
