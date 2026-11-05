@@ -172,6 +172,31 @@ async function hydrateHistoryFromDb() {
 
 let historyStore = loadHistoryStore();
 
+/* One mandate, two names.
+ *
+ * A fund can be renamed in the custodian's files without anything about the portfolio
+ * changing, and the dashboard keys everything on the name — so the history splits in two,
+ * the trend draws as two short lines, and the funds table reports the old name as missing
+ * while the new one sits a few rows above it.
+ *
+ * The mandate below was renamed in June 2026 on a change of management company: same
+ * account, the same thirty-eight holdings on either side of it, and a value that carries
+ * straight across the month. It is read under the name the custodian sends today, and the
+ * check that proves a rename is the account and the holdings, not the names, which say
+ * nothing. Match on the exact saved name — these are two spellings of one mandate, not a
+ * pattern to generalise, and a loose match would merge two funds that are genuinely
+ * different. The same mapping is in the ETL's fund_name_overrides, so a rebuild writes the
+ * new name at source; this is what merges the months already saved under the old one.
+ */
+const FUND_NAME_ALIASES = {
+  "SELECT MGR BCI EQ FD-AYLETT": "SELECT MANAGER FR EQUITY FUND - AYLETT"
+};
+
+function canonicalFundName(fund) {
+  const name = String(fund == null ? "" : fund).trim();
+  return FUND_NAME_ALIASES[name] || fund;
+}
+
 /** Saves the given fund snapshots (state.holdingsSnapshots shape) into history, one entry per
  *  fund keyed by that snapshot's as-of month. Re-saving the same fund+month overwrites it. */
 function saveSnapshotsToHistory(snapshots) {
@@ -179,9 +204,10 @@ function saveSnapshotsToHistory(snapshots) {
   snapshots.forEach(snap => {
     const monthKey = monthKeyFromDate(snap.asOf);
     if (!monthKey) return;
-    const key = `${snap.fund}|${monthKey}`;
+    const fund = canonicalFundName(snap.fund);
+    const key = `${fund}|${monthKey}`;
     historyStore.periods[key] = {
-      fund: snap.fund, fundCode: snap.fundCode, period: monthKey, asOf: snap.asOf,
+      fund, fundCode: snap.fundCode, period: monthKey, asOf: snap.asOf,
       total: snap.total, segments: snap.segments, source: snap.source, format: snap.format,
       savedAt: new Date()
     };
@@ -379,7 +405,12 @@ async function importHistoryFromFile(file) {
   const parsed = JSON.parse(text);
   let imported = 0, tradeMonths = 0;
   Object.entries(parsed.periods || {}).forEach(([key, snap]) => {
-    historyStore.periods[key] = { ...snap, asOf: snap.asOf ? new Date(snap.asOf) : null, savedAt: snap.savedAt ? new Date(snap.savedAt) : null };
+    // the key in the file carries whatever name the fund had when it was written, so it is
+    // rebuilt rather than trusted — an exported history predates any rename since
+    const fund = canonicalFundName(snap.fund);
+    const period = snap.period || key.split("|")[1];
+    historyStore.periods[`${fund}|${period}`] = { ...snap, fund,
+      asOf: snap.asOf ? new Date(snap.asOf) : null, savedAt: snap.savedAt ? new Date(snap.savedAt) : null };
     imported++;
   });
   historyStore.trades = historyStore.trades || {};

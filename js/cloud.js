@@ -92,8 +92,11 @@ async function cloudLoadHistory() {
   // the same shape importHistoryFromFile builds, so every reader downstream is unchanged
   historyStore.periods = {};
   snapshots.forEach(r => {
-    historyStore.periods[`${r.fund}|${r.period}`] = {
-      fund: r.fund,
+    // a mandate renamed in the custodian's files is still one mandate: the rows saved under
+    // each name are keyed to the one the dashboard shows (see FUND_NAME_ALIASES)
+    const fund = canonicalFundName(r.fund);
+    historyStore.periods[`${fund}|${r.period}`] = {
+      fund,
       fundCode: r.fund_code,
       period: r.period,
       asOf: r.as_of ? new Date(`${r.as_of}T12:00:00`) : null,
