@@ -72,7 +72,20 @@ function historyDbRun(mode, fn) {
 function reviveHistoryStore(parsed) {
   const periods = {};
   Object.entries((parsed && parsed.periods) || {}).forEach(([key, snap]) => {
-    periods[key] = { ...snap, asOf: snap.asOf ? new Date(snap.asOf) : null, savedAt: snap.savedAt ? new Date(snap.savedAt) : null };
+    // The stored copy carries the names the funds had when it was written, and this is the
+    // one route into the store that reads something saved before a rename was known about —
+    // so the key is rebuilt here too, not just on the way in from Supabase or a file.
+    // Without it a browser that already had the history kept showing the old name until
+    // someone pressed Load latest, which looks exactly like the page not having updated.
+    const fund = canonicalFundName(snap.fund || key.split("|")[0]);
+    const period = snap.period || key.split("|")[1];
+    const revived = { ...snap, fund, period,
+      asOf: snap.asOf ? new Date(snap.asOf) : null,
+      savedAt: snap.savedAt ? new Date(snap.savedAt) : null };
+    // a rename can land two saved rows on one key; the one saved most recently wins
+    const held = periods[`${fund}|${period}`];
+    if (held && held.savedAt && revived.savedAt && held.savedAt > revived.savedAt) return;
+    periods[`${fund}|${period}`] = revived;
   });
   return { periods, trades: (parsed && parsed.trades) || {} };
 }
