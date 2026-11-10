@@ -1369,7 +1369,7 @@ function renderLookThroughPositions(positions) {
 /* ---------- Active Share ---------- */
 document.getElementById("activeShareFund").addEventListener("change", () =>
   onPositionSelectionChange(document.getElementById("activeShareFund"), null));
-["activeShareIndex", "activeShareOffshore", "activeShareNonEquity"].forEach(id => {
+["activeShareIndex", "activeSharePeriod", "activeShareOffshore", "activeShareNonEquity"].forEach(id => {
   document.getElementById(id).addEventListener("change", renderActiveShareSection);
 });
 
@@ -1410,24 +1410,36 @@ function renderActiveShareSection() {
   }
   empty.style.display = "none"; body.style.display = "block";
 
-  const latest = series[series.length - 1];
+  // Which month the card is showing. It used to be the newest, full stop — so the one
+  // reading nobody could look at was last month's, and a month-end pack written in the first
+  // week of a new month wanted exactly that. The series is in month order, newest first in
+  // the list, and the selection survives a change of fund or index where that month still
+  // has a reading.
+  const periodSel = document.getElementById("activeSharePeriod");
+  const prevMonth = periodSel.value;
+  const ordered = series.slice().reverse();
+  periodSel.innerHTML = ordered.map(s =>
+    `<option value="${s.month}">${monthLabelFromKey(s.month)}</option>`).join("");
+  periodSel.value = ordered.some(s => s.month === prevMonth) ? prevMonth : ordered[0].month;
+  const shown = series.find(s => s.month === periodSel.value) || series[series.length - 1];
+  const isNewest = shown.month === series[series.length - 1].month;
   // the basis is the denominator: saying which sleeve the figure is measured on matters
   // more than which toggles are down, so it is written out rather than listed
   const basis = includeOffshore
     ? (includeNonEquity ? "whole portfolio" : "SA and global equity")
     : (includeNonEquity ? "SA equity, cash and bonds" : "SA equity only");
   document.getElementById("activeShareSubtitle").textContent =
-    `${fund} — ${monthLabelFromKey(latest.month)} vs ${latest.label}, measured on ${basis}`;
+    `${fund} — ${monthLabelFromKey(shown.month)} vs ${shown.label}, measured on ${basis}`;
 
   const kpi = (label, value, sub) =>
     `<div class="kpi"><div class="label">${label}</div><div class="value">${value}</div>
        <div class="delta">${sub || ""}</div></div>`;
-  const futuresApplied = latest.futures.filter(f => f.applied);
+  const futuresApplied = shown.futures.filter(f => f.applied);
   document.getElementById("activeShareKpis").innerHTML =
-    kpi("Active share", `${latest.value.toFixed(1)}%`, monthLabelFromKey(latest.month)) +
-    kpi("Global", `${latest.offshorePct.toFixed(1)}%`,
+    kpi("Active share", `${shown.value.toFixed(1)}%`, monthLabelFromKey(shown.month)) +
+    kpi("Global", `${shown.offshorePct.toFixed(1)}%`,
         includeOffshore ? "counted as active" : "excluded from this view") +
-    kpi("Non-equity", `${latest.nonEquityPct.toFixed(1)}%`,
+    kpi("Non-equity", `${shown.nonEquityPct.toFixed(1)}%`,
         includeNonEquity ? "counted as active" : "excluded from this view") +
     kpi("Index futures", futuresApplied.length
         ? futuresApplied.map(f => `${f.contracts > 0 ? "+" : ""}${f.contracts}`).join(", ")
@@ -1439,7 +1451,7 @@ function renderActiveShareSection() {
   // J200 is the house benchmark, so it stays the default. But a fund whose derivative
   // tracks something else is the one case where another index is the fitting comparison,
   // and that is knowable from the position rather than something to remember.
-  const offIndex = latest.futures
+  const offIndex = shown.futures
     .filter(f => f.applied && f.code !== idxSel.value)
     .map(f => f.code);
   const notes = [];
@@ -1448,16 +1460,16 @@ function renderActiveShareSection() {
       const info = months.map(m => indexInfo(m, c)).find(Boolean);
       return info ? info.label : c;
     });
-    const held = latest.futures.filter(f => f.applied && f.code !== idxSel.value)
+    const held = shown.futures.filter(f => f.applied && f.code !== idxSel.value)
       .map(f => f.name).join(", ");
     notes.push(`Holds ${held}, which tracks ${names.join(" / ")}, but is measured against ` +
-      `${latest.label}. Switch the index if that is the fairer comparison.`);
+      `${shown.label}. Switch the index if that is the fairer comparison.`);
   }
 
   // consolidating a dual listing is an assumption about issuer identity, so it is shown
-  if ((latest.consolidated || []).length) {
+  if ((shown.consolidated || []).length) {
     const byIssuer = {};
-    latest.consolidated.forEach(c => {
+    shown.consolidated.forEach(c => {
       (byIssuer[c.issuer] = byIssuer[c.issuer] || []).push(c.ticker);
     });
     notes.push("Counted under one issuer: " +
@@ -1465,13 +1477,13 @@ function renderActiveShareSection() {
       " — the same economic exposure listed on another exchange.");
   }
 
-  const unpriced = latest.futures.filter(f => !f.applied);
+  const unpriced = shown.futures.filter(f => !f.applied);
   if (unpriced.length) {
     warn.push(`${unpriced.map(f => f.name).join(", ")} carries no contract count in the saved ` +
       `history, so its index exposure is not counted. Rebuild the history to pick it up.`);
   }
-  if (latest.sourceSheet && /capped top40/i.test(latest.sourceSheet) && /SWIX/i.test(latest.label)) {
-    warn.push(`These ${latest.label} weights were sourced from the ${latest.sourceSheet} sheet, ` +
+  if (shown.sourceSheet && /capped top40/i.test(shown.sourceSheet) && /SWIX/i.test(shown.label)) {
+    warn.push(`These ${shown.label} weights were sourced from the ${shown.sourceSheet} sheet, ` +
       `so they are not SWIX weights.`);
   }
   // red is for something being wrong; a benchmark suggestion is not, so it reads as a note
@@ -1479,15 +1491,17 @@ function renderActiveShareSection() {
     warn.map(w => `<div class="card-subtitle" style="color:var(--bad);margin-bottom:8px;">${w}</div>`).join("") +
     notes.map(n => `<div class="card-subtitle" style="margin-bottom:8px;">${n}</div>`).join("");
 
-  renderActiveShareChart(series.map(s => ({ month: s.month, value: s.value })));
-  document.getElementById("activeShareHeadlineSub").textContent =
-    `Latest reading, against ${series.length} month${series.length > 1 ? "s" : ""} measured so far`;
+  renderActiveShareChart(series.map(s => ({ month: s.month, value: s.value })), shown.month);
+  document.getElementById("activeShareHeadlineSub").textContent = isNewest
+    ? `Latest reading, against ${series.length} month${series.length > 1 ? "s" : ""} measured so far`
+    : `${monthLabelFromKey(shown.month)}, one of ${series.length} months measured — the newest is `
+      + `${monthLabelFromKey(series[series.length - 1].month)}`;
 
   // the table is capped, so say what is being left out rather than implying it is the lot
-  const shownRows = latest.rows.slice(0, 14);
+  const shownRows = shown.rows.slice(0, 14);
   document.getElementById("activeSharePositionsSub").textContent =
-    latest.rows.length > shownRows.length
-      ? `The ${shownRows.length} widest gaps between the fund and the index, of ${latest.rows.length}`
+    shown.rows.length > shownRows.length
+      ? `The ${shownRows.length} widest gaps between the fund and the index, of ${shown.rows.length}`
       : "The widest gaps between the fund and the index";
 
   // Not coloured. Green and red say good and bad, and an overweight is neither: it is the

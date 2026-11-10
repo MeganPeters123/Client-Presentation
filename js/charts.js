@@ -573,8 +573,9 @@ function renderBreakdownChart(rows, by, labelTotal) {
 
 let activeShareChartInstance = null;
 
-/** points: [{ month, value }] oldest first. */
-function renderActiveShareChart(points) {
+/** points: [{ month, value }] oldest first; `selected` is the month the rest of the card is
+ *  showing, drawn larger so the line says which reading the figures below belong to. */
+function renderActiveShareChart(points, selected) {
   const ctx = document.getElementById("activeShareChart").getContext("2d");
   if (activeShareChartInstance) activeShareChartInstance.destroy();
   const ink2 = cssVar("--ink-2"), grid = cssVar("--grid"), accent = cssVar("--accent");
@@ -588,7 +589,9 @@ function renderActiveShareChart(points) {
         data: points.map(p => p.value),
         borderColor: accent,
         backgroundColor: accent,
-        pointRadius: 4,
+        pointRadius: points.map(p => p.month === selected ? 7 : 4),
+        pointBorderColor: points.map(p => p.month === selected ? cssVar("--surface") : accent),
+        pointBorderWidth: points.map(p => p.month === selected ? 3 : 1),
         tension: 0.25,
         fill: false
       }]
