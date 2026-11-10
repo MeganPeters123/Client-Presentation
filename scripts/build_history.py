@@ -44,6 +44,12 @@ CONFIG_PATH = Path(__file__).parent / "config.json"
 
 # A futures or option line, whose market value never describes what it is exposed to.
 DERIVATIVE_CATEGORY = re.compile(r"derivativ|future|option", re.I)
+# A dated contract name — "17DEC26 ALSI", "19DEC24 FINI". The category cannot be relied on
+# to find these: the custodian files them under Derivatives, Curo under SA Fixed Income and
+# the IPD export under whichever asset class the mandate wrapper puts them in, so a test on
+# category alone silently misses two sources out of three. The name is written the same way
+# by all of them.
+CONTRACT_NAME = re.compile(r"\d{2}[A-Z]{3}\d{2}", re.I)
 
 # An FX cash line: the ticker is the currency code itself, and the line sits in cash.
 CCY_CODE = re.compile(r"^[A-Z]{3}$")
@@ -498,8 +504,12 @@ def holding_row(h):
     # A derivative's market value is its unrealised profit, not its exposure, so it never
     # describes the position however large it is — an earlier version only kept these where
     # the value rounded to zero, and a future carrying R494,500 of profit lost its contract
-    # count and could not be sized at all.
-    if nominal and price and (DERIVATIVE_CATEGORY.search(row["category"]) or abs(row["value"]) < 1.0):
+    # count and could not be sized at all. The category test then missed the two sources that
+    # do not file futures under a derivative heading, so the name is tested as well.
+    looks_like_a_contract = (DERIVATIVE_CATEGORY.search(row["category"])
+                             or CONTRACT_NAME.search(row["name"] or "")
+                             or abs(row["value"]) < 1.0)
+    if nominal and price and looks_like_a_contract:
         row["nominal"] = nominal
         row["price"] = price
     return row

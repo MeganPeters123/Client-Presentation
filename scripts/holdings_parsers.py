@@ -285,10 +285,18 @@ def parse_flat_csv(path):
         entry["total"] += value
         entry["segments"][label] = entry["segments"].get(label, 0.0) + value
         name = row[col_index["Short Name"]].strip() if "Short Name" in col_index and col_index["Short Name"] < len(row) else ""
+        # The count and the price sit in the next columns along and were never read. An index
+        # future is carried at a market value of nothing, so without them a position worth
+        # millions of index exposure looked like an empty line — the active share card could
+        # only say it was there and not what it was worth.
+        def cell(name_):
+            j = col_index.get(name_, -1)
+            return to_number(row[j]) if 0 <= j < len(row) else None
         entry["holdings"].append({
             "name": name or row[col_index["Security"]].strip(),
             "ticker": row[col_index["Security"]].strip() if "Security" in col_index else "",
             "ccy": str(ccy or "").strip(), "category": label, "value": value,
+            "nominal": cell("Unit Holding"), "price": cell("Market Price"),
         })
 
     out = []
@@ -352,6 +360,11 @@ def parse_ipd_xls(path):
 
     pct_total_col = next((j for j, c in enumerate(grid[header_idx])
                           if re.search(r"%\s*of\s*total", str(c or ""), re.I)), -1)
+    # "Price", not "Average Price" — the first is the valuation price, the second the book
+    # cost. The holding total was already being read to decide what a row is; it is kept now
+    # as well, so a futures line carries the count and price its exposure is worked out from.
+    price_col = next((j for j, c in enumerate(grid[header_idx])
+                      if re.fullmatch(r"price", " ".join(str(c or "").split()), re.I)), -1)
 
     segments, positions = [], []
     current_class = ""
@@ -389,6 +402,8 @@ def parse_ipd_xls(path):
                 "name": str(row[1] or "").strip() or label, "ticker": label, "ccy": "",
                 "category": current_class, "value": value or 0.0,
                 "pct": (to_number(row[pct_total_col]) if pct_total_col != -1 and pct_total_col < len(row) else None) or 0.0,
+                "nominal": to_number(holding_total),
+                "price": to_number(row[price_col]) if 0 <= price_col < len(row) else None,
             })
 
     if not segments:
