@@ -117,10 +117,13 @@ function renameIndexConstituents(weights, month) {
 
 /* Which index each contract tracks. DCAP is the capped-SWIX top 40, which is the index the
  * J430 block carries — and is what the older Balanced positions were written against before
- * they rolled into CTOP. DTOP is deliberately absent: no index code in the weights export
- * corresponds to it, so a DTOP contract should report as unsized rather than be quietly
- * charged to the wrong index. */
-const FUTURE_INDEX = [[/ALSI/i, "J200"], [/CTOP/i, "J300"], [/DCAP/i, "J430"]];
+ * they rolled into CTOP. FINI is the financial 15, which the weights export carries as
+ * FINI15: Balanced closed its CTOP short in October 2026 and opened a FINI long, and until
+ * this line was here that position was not recognised as an index future at all — not
+ * spread, not reported as unsized, simply absent from a measure built on it. DTOP is
+ * deliberately absent: no index code in the weights export corresponds to it, so a DTOP
+ * contract should report as unsized rather than be quietly charged to the wrong index. */
+const FUTURE_INDEX = [[/ALSI/i, "J200"], [/CTOP/i, "J300"], [/DCAP/i, "J430"], [/FINI/i, "FINI15"]];
 
 function loadIndexWeights() {
   const empty = { months: {}, fileName: "", loadedAt: null };
