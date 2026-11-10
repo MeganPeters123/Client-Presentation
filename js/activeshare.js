@@ -209,7 +209,7 @@ async function importIndexWeightsFromFile(file) {
     m.monthEnd = me;
     m.sourceDate = isoDate(pick(r, "sourcedate")) || me;
     const idx = (m.indices[code] = m.indices[code] || {
-      label: [code, pick(r, "portfolio")].filter(Boolean).join(" "),
+      label: tidyIndexLabel([code, pick(r, "portfolio")].filter(Boolean).join(" ")),
       sourceSheet: pick(r, "sourcesheet") || "",
       // kept per index as well as per month: the indices in one file do not share a source
       // date, and the month-level one is simply whichever index was read last. FINI15 lands
@@ -243,12 +243,35 @@ function listIndexCodes(month) {
   return m ? Object.keys(m.indices).sort() : [];
 }
 
+/** The label an index is shown under: "J200 ALSI40", but plain "FINI15".
+ *
+ *  It is the index code followed by the portfolio name, which reads well while the two
+ *  differ. FINI15 has no published JSE code, so the pipeline writes the same string into
+ *  both columns and the label came out doubled. Repeats are collapsed on the way out as
+ *  well as at the parse, so weights already saved — in this browser and in the shared
+ *  store — read correctly without anyone re-importing the file.
+ */
+function tidyIndexLabel(label) {
+  const seen = new Set();
+  const kept = [];
+  String(label || "").split(/\s+/).forEach(token => {
+    if (!token) return;
+    const key = token.toUpperCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    kept.push(token);
+  });
+  return kept.join(" ");
+}
+
 function indexInfo(month, code) {
   const m = indexWeightsStore.months[month];
   const idx = (m && m.indices[code]) || null;
   if (!idx) return null;
   const weights = renameIndexConstituents(idx.weights, month);
-  return weights === idx.weights ? idx : { ...idx, weights };
+  const label = tidyIndexLabel(idx.label);
+  if (weights === idx.weights && label === idx.label) return idx;
+  return { ...idx, weights, label };
 }
 
 /** Which index a futures line tracks, from its contract name. */
