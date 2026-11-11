@@ -726,3 +726,77 @@ function renderTopTradesChart(buys, sells, ccy, netMode) {
     }
   });
 }
+
+let attributionWeightChartInstance = null;
+
+/** The over/under chart: how far the fund's weight sat from the index, holding by holding.
+ *
+ *  Sorted by the size of the active position rather than by what it earned, and picked that
+ *  way too, because that is the question this chart answers — where the fund was willing to
+ *  differ. The table underneath stays sorted by effect, which is the other question, and
+ *  each says which it is. A holding the fund does not own at all is the whole left-hand side
+ *  of this picture: an index member at zero weight is as much a decision as a big position,
+ *  and it is the one most easily forgotten.
+ */
+function renderAttributionWeightChart(rows) {
+  const wrap = document.getElementById("attributionWeightWrap");
+  const ctx = document.getElementById("attributionWeightChart");
+  if (!ctx) return;
+  if (attributionWeightChartInstance) {
+    attributionWeightChartInstance.destroy();
+    attributionWeightChartInstance = null;
+  }
+  if (!rows.length) { wrap.style.display = "none"; return; }
+  wrap.style.display = "block";
+  // a row needs room to be read; the wrapper grows rather than the bars being squeezed
+  wrap.style.height = Math.max(180, 24 * rows.length + 56) + "px";
+
+  const ink2 = cssVar("--ink-2"), grid = cssVar("--grid");
+  const good = cssVar("--good"), bad = cssVar("--bad");
+  const pct = (v, dp = 2) => v === null || v === undefined ? "—"
+    : `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(dp)}%`;
+  const plain = (v, dp = 2) => v === null || v === undefined ? "—" : `${v.toFixed(dp)}%`;
+
+  attributionWeightChartInstance = new Chart(ctx.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels: rows.map(r => r.label),
+      datasets: [{
+        data: rows.map(r => r.aWgt),
+        backgroundColor: rows.map(r => (r.aWgt >= 0 ? good : bad)),
+        borderWidth: 0
+      }]
+    },
+    options: {
+      indexAxis: "y",
+      responsive: true, maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            // the bar is the gap; the two weights it came from and what it earned are the
+            // three things someone asks next, so they are all on the hover rather than
+            // needing the table underneath to be read across
+            label: c => {
+              const r = rows[c.dataIndex];
+              return [
+                `${r.aWgt >= 0 ? "Overweight" : "Underweight"} ${pct(r.aWgt)}`,
+                `Fund ${plain(r.wgt)} · index ${plain(r.bWgt)}`,
+                `Effect ${pct(r.attr, 3)}`
+              ];
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: ink2, callback: v => pct(v, 1) },
+             grid: { color: grid, zeroLineColor: ink2 },
+             title: { display: true, text: "Fund weight less index weight",
+                      color: ink2, font: { size: 11 } } },
+        y: { ticks: { color: ink2, font: { size: 11 }, autoSkip: false },
+             grid: { color: "transparent" } }
+      }
+    }
+  });
+}

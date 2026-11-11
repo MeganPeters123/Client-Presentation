@@ -398,6 +398,24 @@ function renderAttributionSection() {
     step.style.display = "none";
   } else {
     step.style.display = "";
+    // The chart answers "where did the fund differ", the table "what did differing earn",
+    // so each is sorted and picked on its own measure. Showing the table's selection on the
+    // chart would rank positions by weight while having chosen them by return, which is the
+    // kind of chart that looks fine and means nothing.
+    const byWeight = a.rows.filter(r => r.aWgt !== null && r.aWgt !== undefined && r.aWgt !== 0)
+                           .sort((x, y) => y.aWgt - x.aWgt);
+    const shownW = pick(byWeight).map(r => ({
+      label: r.name + (r.expiry ? ` · ${r.expiry}` : ""),
+      aWgt: r.aWgt, wgt: r.wgt, bWgt: r.bWgt, attr: r.attr
+    }));
+    renderAttributionWeightChart(shownW);
+    const over = byWeight.filter(r => r.aWgt > 0).length;
+    const notHeld = byWeight.filter(r => r.wgt === null || r.wgt === undefined).length;
+    document.getElementById("attributionWeightSub").textContent =
+      `Fund weight less ${a.benchmark || "index"} weight, biggest positions either way. `
+      + `${over} of ${byWeight.length} are overweights`
+      + (notHeld ? `, and ${notHeld} are index members the fund did not hold at all.` : ".");
+
     const attr = a.rows.filter(r => r.attr !== null && r.attr !== undefined)
                        .sort((x, y) => y.attr - x.attr);
     const shownA = pick(attr);
