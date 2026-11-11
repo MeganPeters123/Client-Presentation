@@ -215,10 +215,18 @@ async function importIndexWeightsFromFile(file) {
       // date, and the month-level one is simply whichever index was read last. FINI15 lands
       // a few days before the others, so a J200 figure was being stamped with FINI15's date.
       sourceDate: isoDate(pick(r, "sourcedate")) || me,
-      weights: {}
+      weights: {},
+      // The constituent's name, which this file is the only source of for a share no fund
+      // holds. Active share never needed it — it compares weights — but attribution has a
+      // row for every index member, and the largest single effect in both equity funds is
+      // Naspers, which neither of them owns. Without this it reads "NPN SJ" on a client
+      // page. Absent on weights saved before this, so the lookup falls back to the ticker.
+      names: {}
     });
     // the file carries decimals; percentages are what everything else here speaks
     idx.weights[share] = weight * 100;
+    const shareName = pick(r, "name");
+    if (shareName && !idx.names[share]) idx.names[share] = String(shareName).trim();
   });
 
   indexWeightsStore = { months, fileName: file.name, loadedAt: new Date().toISOString() };

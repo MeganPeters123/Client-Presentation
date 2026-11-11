@@ -290,3 +290,21 @@ table.data-table tfoot td{ border-top:1.5px solid var(--border); border-bottom:n
 @media (max-width:760px){ .chart-wrap.donut.breakdown-donut{ height:230px; } }
 
 
+
+/* ---------- attribution: diverging contribution bars ---------- */
+/* Zero sits in the middle of the track and every bar is scaled to the largest value on
+   screen, so a column of them reads as one picture: the length is the size of the
+   contribution and the side is its sign. Scaled per table rather than per fund, because a
+   fund whose biggest contributor is 0.3% should still fill its own chart. */
+table.data-table th.bar-col{ width:200px; }
+table.data-table td.bar-col{ width:200px; padding-right:14px; vertical-align:middle; }
+table.data-table td.attr-strong{ font-weight:650; }
+.attr-track{ position:relative; height:15px; background:var(--surface-2);
+  border-radius:3px; overflow:hidden; }
+.attr-zero{ position:absolute; left:50%; top:0; bottom:0; width:1px; background:var(--border); }
+.attr-bar{ position:absolute; top:3px; bottom:3px; border-radius:2px; min-width:1px; }
+.attr-bar.good{ background:var(--good); }
+.attr-bar.bad{ background:var(--bad); }
+@media (max-width: 720px){
+  table.data-table th.bar-col, table.data-table td.bar-col{ display:none; }
+}

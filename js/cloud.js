@@ -166,11 +166,11 @@ function cloudSaveState(key, value, delay = 1500) {
  *  leaving someone wondering whether an empty look-through means it failed. */
 async function cloudLoadState() {
   const c = getCloudClient();
-  if (!c) return { saIncome: false, indexWeights: false };
+  if (!c) return { saIncome: false, indexWeights: false, attribution: false };
   const { data, error } = await c.from("app_state").select("key,value");
   if (error) throw new Error(error.message);
 
-  const found = { saIncome: false, indexWeights: false };
+  const found = { saIncome: false, indexWeights: false, attribution: false };
   cloudHydrating = true;
   (data || []).forEach(row => {
     if (row.key === "sa_income" && row.value && typeof saIncStore !== "undefined") {
@@ -182,6 +182,14 @@ async function cloudLoadState() {
       indexWeightsStore = { ...indexWeightsStore, ...row.value };
       persistIndexWeights();
       found.indexWeights = true;
+    }
+    // Replaced outright rather than merged: the attribution is one period's set of funds,
+    // and spreading a newer one over an older would leave a fund from the period before
+    // sitting beside the rest, looking like part of the same comparison.
+    if (row.key === "attribution" && row.value && typeof attributionStore !== "undefined") {
+      attributionStore = row.value;
+      persistAttribution();
+      found.attribution = true;
     }
   });
   cloudHydrating = false;

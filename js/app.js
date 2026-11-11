@@ -113,17 +113,26 @@ function showToast(msg) {
 /* ---------- upload wiring ---------- */
 // every slot in the Data panel has to be named here — a slot left off this list still
 // renders, and still looks droppable, while having no handler of any kind behind it
-["aum", "allocation", "trades", "holdings", "saincome", "indexweights", "gics"].forEach(kind => {
+["aum", "allocation", "trades", "holdings", "saincome", "indexweights", "gics",
+ "attribution"].forEach(kind => {
   const slot = document.getElementById("slot-" + kind);
   const input = document.getElementById("file-" + kind);
+  // Attribution is a file per fund, so all of them are taken in one go rather than making
+  // someone drop four files one at a time and watch four toasts.
+  const many = kind === "attribution";
+  const take = files => {
+    if (!files.length) return;
+    if (many) handleUploadMany(kind, Array.from(files));
+    else handleUpload(kind, files[0]);
+  };
   slot.addEventListener("click", () => input.click());
   slot.addEventListener("dragover", e => { e.preventDefault(); slot.classList.add("drag"); });
   slot.addEventListener("dragleave", () => slot.classList.remove("drag"));
   slot.addEventListener("drop", e => {
     e.preventDefault(); slot.classList.remove("drag");
-    if (e.dataTransfer.files.length) handleUpload(kind, e.dataTransfer.files[0]);
+    take(e.dataTransfer.files);
   });
-  input.addEventListener("change", () => { if (input.files.length) handleUpload(kind, input.files[0]); });
+  input.addEventListener("change", () => { take(input.files); input.value = ""; });
 });
 
 async function handleUpload(kind, file) {
@@ -212,6 +221,203 @@ function renderSaIncomeSourceList() {
     renderSaIncomeSourceList();
     renderLookThroughSection();
   }));
+}
+
+/* ---------- attribution (Bloomberg PORT) ---------- */
+
+/** Several files at once, one per fund. Each is reported on its own: a file that cannot be
+ *  read must not stop the ones after it, because the usual way this goes wrong is one export
+ *  of the four being run with the wrong columns, and the other three are still worth having. */
+async function handleUploadMany(kind, files) {
+  if (kind !== "attribution") { await handleUpload(kind, files[0]); return; }
+  const done = [], failed = [];
+  let replaced = false;
+  for (const file of files) {
+    try {
+      const res = await importAttributionFromFile(file);
+      if (res.replaced) replaced = true;
+      done.push(res);
+    } catch (err) {
+      console.error(file.name, err);
+      failed.push(`${file.name}: ${err.message}`);
+    }
+  }
+  renderAttributionSourceList();
+  renderAttributionSection();
+  if (failed.length) showToast(failed.length === 1 ? `Could not read ${failed[0]}`
+    : `${failed.length} files could not be read — see the console`);
+  else if (done.length) {
+    const withB = done.filter(d => d.hasBenchmark).length;
+    showToast(`${done.length} fund${done.length > 1 ? "s" : ""} loaded`
+      + (withB ? `, ${withB} with benchmark columns` : "")
+      + (replaced ? " — earlier period cleared" : ""));
+  }
+}
+
+function renderAttributionSourceList() {
+  const slot = document.getElementById("slot-attribution");
+  const list = document.getElementById("attributionSourceList");
+  const status = document.getElementById("status-attribution");
+  const funds = listAttributionFunds();
+  if (!funds.length) {
+    slot.classList.remove("loaded");
+    status.textContent = "";
+    list.innerHTML = "";
+    return;
+  }
+  slot.classList.add("loaded");
+  status.textContent = `${funds.length} fund${funds.length > 1 ? "s" : ""} · ${attributionPeriodLabel()}`;
+  list.innerHTML = funds.map(f => {
+    const a = attributionFor(f);
+    return `<div class="source-chip">
+      <span>${escAttr(f)}</span>
+      <span class="n">${a.hasBenchmark ? "vs " + escAttr(a.benchmark || "index") : "contribution only"}</span>
+      <span class="rm" data-fund="${escAttr(f)}" title="Remove">✕</span>
+    </div>`;
+  }).join("");
+  list.querySelectorAll(".rm").forEach(el => el.addEventListener("click", ev => {
+    ev.stopPropagation();
+    delete attributionStore.funds[el.dataset.fund];
+    if (!listAttributionFunds().length) clearAttribution();
+    else persistAttribution();
+    renderAttributionSourceList();
+    renderAttributionSection();
+  }));
+}
+
+/** A diverging bar, zero in the middle, scaled to the biggest value shown. */
+function attributionBar(value, max) {
+  const w = max ? Math.abs(value) / max * 50 : 0;
+  const side = value >= 0 ? "good" : "bad";
+  const left = value >= 0 ? 50 : 50 - w;
+  return `<div class="attr-track"><div class="attr-zero"></div>` +
+         `<div class="attr-bar ${side}" style="left:${left}%;width:${w}%"></div></div>`;
+}
+
+function renderAttributionSection() {
+  const card = document.getElementById("attributionCard");
+  const empty = document.getElementById("attributionEmpty");
+  const body = document.getElementById("attributionBody");
+  const funds = listAttributionFunds();
+  if (!funds.length) {
+    card.style.display = "none";
+    return;
+  }
+  card.style.display = "block";
+  empty.style.display = "none";
+  body.style.display = "block";
+
+  const fundSel = document.getElementById("attributionFund");
+  const prev = fundSel.value;
+  fundSel.innerHTML = funds.map(f => `<option value="${escAttr(f)}">${escAttr(f)}</option>`).join("");
+  fundSel.value = funds.includes(prev) ? prev : funds[0];
+  const a = attributionFor(fundSel.value);
+
+  const countSel = document.getElementById("attributionCount");
+  const limit = Number(countSel.value || 10);
+
+  const pc = (v, dp = 2) => v === null || v === undefined ? "—"
+    : `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(dp)}%`;
+  const plain = (v, dp = 2) => v === null || v === undefined ? "—" : `${v.toFixed(dp)}%`;
+  const cls = v => v === null || v === undefined ? "" : (v >= 0 ? "delta-up" : "delta-down");
+
+  document.getElementById("attributionSubtitle").textContent =
+    `${fundSel.value} · ${attributionPeriodLabel()}`;
+  document.getElementById("attributionHeadlineSub").textContent = a.hasBenchmark
+    ? `Measured against ${a.benchmark || "the index"}`
+    : "This export carried no benchmark columns, so there is no comparison to an index";
+
+  const kpi = (label, value, sub, klass) =>
+    `<div class="kpi"><div class="label">${escAttr(label)}</div>` +
+    `<div class="value ${klass || ""}">${value}</div>` +
+    `<div class="delta">${escAttr(sub || "")}</div></div>`;
+  const kpis = [kpi("Fund return", pc(a.fundReturn), "over the period", cls(a.fundReturn))];
+  if (a.hasBenchmark) {
+    kpis.push(kpi(`${a.benchmark || "Index"} return`, pc(a.bmrkReturn), "same period", cls(a.bmrkReturn)));
+    kpis.push(kpi("Active return", pc(a.activeReturn), "fund less index", cls(a.activeReturn)));
+  }
+  kpis.push(kpi("Unexplained", pc(a.residual, 3), "residual, not attributed to a holding"));
+  document.getElementById("attributionKpis").innerHTML = kpis.join("");
+
+  const warn = [];
+  const unnamed = a.rows.filter(r => !r.named).length;
+  if (unnamed) {
+    // Nearly all of these are index members the fund does not hold, so there is no holding
+    // row anywhere to take a name from. The index weights file carries one per constituent
+    // and is the only source for them, but weights saved before that column was read have
+    // no names in them — hence the specific instruction rather than a shrug.
+    const haveIndexNames = Object.values((typeof indexWeightsStore !== "undefined"
+      && indexWeightsStore.months) || {}).some(m =>
+      Object.values(m.indices || {}).some(i => i.names && Object.keys(i.names).length));
+    const many = unnamed > 1;
+    // A line the fund has no weight in is one the index holds and it does not, so the index
+    // weights file is the only place its name can come from. Only say so when that is
+    // actually what these are: with one unmatched money-market line, telling someone to
+    // re-upload the weights sends them to fix something that was never the problem.
+    const fromIndex = a.rows.filter(r => !r.named && (r.wgt === null || r.wgt === undefined)).length;
+    warn.push(`${unnamed} line${many ? "s" : ""} could not be matched to a name and `
+      + `${many ? "show" : "shows"} the Bloomberg identifier instead. `
+      + `${many ? "They are" : "It is"} still counted in every total.`
+      + (!haveIndexNames && fromIndex ? ` ${fromIndex} of them ${fromIndex > 1 ? "are" : "is"} `
+          + `in the index but not this fund — upload the Index Weights file again on the `
+          + `Data tab to name ${fromIndex > 1 ? "those" : "it"}.` : ""));
+  }
+  if (!a.hasBenchmark && a.benchmark) {
+    warn.push(`The export names ${escAttr(a.benchmark)} as its benchmark but carries no benchmark `
+      + `columns, so only contribution is shown. Nothing here is measured against an index.`);
+  }
+  document.getElementById("attributionWarnings").innerHTML =
+    warn.map(w => `<div class="gap-note">${w}</div>`).join("");
+
+  /* ---- what drove the return ---- */
+  const contrib = a.rows.filter(r => r.ctr !== null && r.ctr !== undefined)
+                        .sort((x, y) => y.ctr - x.ctr);
+  const pick = rows => (limit && rows.length > limit * 2)
+    ? [...rows.slice(0, limit), ...rows.slice(-limit)] : rows;
+  const shownC = pick(contrib);
+  const maxC = Math.max(...shownC.map(r => Math.abs(r.ctr)), 0) || 1;
+  const label = r => escAttr(r.name + (r.expiry ? ` · ${r.expiry}` : ""));
+  document.querySelector("#attributionContribTable tbody").innerHTML = shownC.map(r => `
+    <tr>
+      <td>${label(r)}</td>
+      <td class="num">${plain(r.wgt)}</td>
+      <td class="num ${cls(r.ret)}">${pc(r.ret)}</td>
+      <td class="num attr-strong ${cls(r.ctr)}">${pc(r.ctr, 3)}</td>
+      <td class="bar-col">${attributionBar(r.ctr, maxC)}</td>
+    </tr>`).join("");
+  document.getElementById("attributionContribSub").textContent =
+    `Weight times return, in points of the fund's ${pc(a.fundReturn)}. `
+    + (limit && contrib.length > limit * 2
+        ? `Top ${limit} and bottom ${limit} of ${contrib.length} holdings.`
+        : `All ${contrib.length} holdings.`)
+    + ` They add to ${pc(a.holdingsCtr, 3)}, and the rest is the residual above.`;
+
+  /* ---- against the index ---- */
+  const step = document.getElementById("attributionAttrStep");
+  if (!a.hasBenchmark) {
+    step.style.display = "none";
+  } else {
+    step.style.display = "";
+    const attr = a.rows.filter(r => r.attr !== null && r.attr !== undefined)
+                       .sort((x, y) => y.attr - x.attr);
+    const shownA = pick(attr);
+    const maxA = Math.max(...shownA.map(r => Math.abs(r.attr)), 0) || 1;
+    document.querySelector("#attributionAttrTable tbody").innerHTML = shownA.map(r => `
+      <tr>
+        <td>${label(r)}</td>
+        <td class="num">${plain(r.wgt)}</td>
+        <td class="num">${plain(r.bWgt)}</td>
+        <td class="num ${cls(r.aWgt)}">${pc(r.aWgt)}</td>
+        <td class="num attr-strong ${cls(r.attr)}">${pc(r.attr, 3)}</td>
+        <td class="bar-col">${attributionBar(r.attr, maxA)}</td>
+      </tr>`).join("");
+    document.getElementById("attributionAttrSub").textContent =
+      `Against ${a.benchmark || "the index"}. A holding the fund does not own still appears, `
+      + `because not owning something the index holds is itself a decision. `
+      + (limit && attr.length > limit * 2
+          ? `Top ${limit} and bottom ${limit} of ${attr.length}.`
+          : `All ${attr.length}.`);
+  }
 }
 
 /* ---------- index weights (for active share) ---------- */
@@ -1366,6 +1572,11 @@ function renderLookThroughPositions(positions) {
   });
 }
 
+/* ---------- Attribution ---------- */
+["attributionFund", "attributionCount"].forEach(id => {
+  document.getElementById(id).addEventListener("change", renderAttributionSection);
+});
+
 /* ---------- Active Share ---------- */
 document.getElementById("activeShareFund").addEventListener("change", () =>
   onPositionSelectionChange(document.getElementById("activeShareFund"), null));
@@ -2255,8 +2466,10 @@ function renderAll() {
   renderSaIncomeSourceList();
   renderGicsSourceList();
   renderIndexWeightsSourceList();
+  renderAttributionSourceList();
   renderLookThroughSection();
   renderActiveShareSection();
+  renderAttributionSection();
   renderBreakdownSection();
   renderHoldingsSections();
   renderTradeActivitySection();

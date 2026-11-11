@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aylett & Co — AUM Dashboard</title>
-<link rel="stylesheet" href="css/style.css?v=ec6fac89">
+<link rel="stylesheet" href="css/style.css?v=d06f8c2b">
 </head>
 <body>
 
@@ -32,6 +32,7 @@
     <button class="tab" role="tab" data-target="exposure">Exposure</button>
     <button class="tab" role="tab" data-target="holdings">Holdings</button>
     <button class="tab" role="tab" data-target="activeshare">Active Share</button>
+    <button class="tab" role="tab" data-target="attribution">Attribution</button>
     <button class="tab" role="tab" data-target="trades">Trades</button>
     <button class="tab" role="tab" data-target="data">Data</button>
   </nav>
@@ -118,6 +119,14 @@
           <div class="status" id="status-indexweights"></div>
           <div class="source-list" id="indexWeightsSourceList"></div>
           <input type="file" id="file-indexweights" accept=".csv,.xlsx,.xls">
+        </div>
+        <div class="upload-slot" id="slot-attribution" data-kind="attribution">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <h3>Attribution</h3>
+          <p>Bloomberg PORT exports, one file per fund (e.g. "2026.10 - BAL 1Y.xlsx"). Drives contribution and attribution. All files must cover the same period.</p>
+          <div class="status" id="status-attribution"></div>
+          <div class="source-list" id="attributionSourceList"></div>
+          <input type="file" id="file-attribution" accept=".xlsx,.xlsm,.xls" multiple>
         </div>
       </div>
       <div class="sample-row">
@@ -575,6 +584,85 @@
     </div>
   </div>
 
+  <div id="attributionCard" data-tab="attribution" class="card" style="display:none;">
+    <div class="card-head">
+      <div>
+        <div class="card-title">Attribution</div>
+        <div class="card-subtitle" id="attributionSubtitle">What drove the return, and what it was worth against the index</div>
+      </div>
+      <div class="funds-controls">
+        <select id="attributionFund"></select>
+        <select id="attributionCount" title="How many holdings to show each side">
+          <option value="10">Top 10 each way</option>
+          <option value="15">Top 15 each way</option>
+          <option value="25">Top 25 each way</option>
+          <option value="0">Every holding</option>
+        </select>
+      </div>
+    </div>
+    <div id="attributionEmpty" class="empty-hint" style="padding:24px 20px;">
+      Upload the Bloomberg PORT exports on the Data tab to show contribution and attribution.
+    </div>
+    <div id="attributionBody" style="display:none;">
+      <div class="flow-step">
+        <div class="step-head">
+          <span class="step-num">1</span>
+          <div>
+            <div class="step-title">What the fund returned</div>
+            <div class="step-sub" id="attributionHeadlineSub">Over the period the export covers</div>
+          </div>
+        </div>
+        <div class="kpi-row" id="attributionKpis" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));"></div>
+        <div id="attributionWarnings"></div>
+      </div>
+
+      <div class="flow-step">
+        <div class="step-head">
+          <span class="step-num">2</span>
+          <div>
+            <div class="step-title">What drove the return</div>
+            <div class="step-sub" id="attributionContribSub">Weight times return: the points of the fund's return each holding was responsible for</div>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table" id="attributionContribTable">
+            <thead><tr>
+              <th>Holding</th>
+              <th class="num">Avg weight</th>
+              <th class="num">Return</th>
+              <th class="num">Contribution</th>
+              <th class="bar-col"></th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="flow-step" id="attributionAttrStep">
+        <div class="step-head">
+          <span class="step-num">3</span>
+          <div>
+            <div class="step-title">Against the index</div>
+            <div class="step-sub" id="attributionAttrSub">Where the fund's weight differed, and what that difference was worth</div>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table" id="attributionAttrTable">
+            <thead><tr>
+              <th>Holding</th>
+              <th class="num">Fund</th>
+              <th class="num">Index</th>
+              <th class="num">Over / under</th>
+              <th class="num">Effect</th>
+              <th class="bar-col"></th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="tradesTabCard" data-tab="trades" class="card" style="display:none;">
     <div class="card-head">
       <div>
@@ -736,11 +824,12 @@
 <script src="js/holdings.js?v=619cd99d"></script>
 <script src="js/history.js?v=ed349218"></script>
 <script src="js/lookthrough.js?v=e431cd29"></script>
-<script src="js/cloud.js?v=cef25cc6"></script>
-<script src="js/activeshare.js?v=d644fbea"></script>
+<script src="js/cloud.js?v=9f31a82f"></script>
+<script src="js/activeshare.js?v=87ff88a8"></script>
+<script src="js/attribution.js?v=01bd5204"></script>
 <script src="js/charts.js?v=d0ff951d"></script>
-<script src="js/tabs.js?v=e9c7517f"></script>
-<script src="js/app.js?v=57e556da"></script>
+<script src="js/tabs.js?v=0e8fb5b8"></script>
+<script src="js/app.js?v=226885e6"></script>
 <script src="js/export.js?v=8ea64502"></script>
 </body>
 </html>
