@@ -176,6 +176,37 @@ function attributionNumber(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+/** What a line is, read from its identifier alone.
+ *
+ *  Structural on purpose. The first version of this only classified a row when the name
+ *  lookup had failed, so anything the dashboard could name stayed an "equity" — and the
+ *  rand, which the holdings name perfectly well, is the largest single over-weight in the
+ *  SA equity fund. An equities-only view that still led with cash would have been worse
+ *  than no view at all.
+ *
+ *  Reading the identifier rather than a stored field also means weights imported before
+ *  this existed classify correctly without being uploaded again.
+ *
+ *  A bare three-letter identifier is always a currency here: PORT writes shares with an
+ *  exchange code after a space, and aggregates cash into one line per currency, so there
+ *  are no money-market or bill rows of the kind the holdings files carry. The contract
+ *  pattern is tested without its cash-leg twin, which only the naming needs: a false
+ *  positive leaves one line out of an equities-only chart, where a wrong name would have
+ *  put the wrong company against a number.
+ */
+function attributionKind(row) {
+  const id = String((row && row.id) || "");
+  if (/^[A-Z]{3}$/.test(id)) return "Cash";
+  if (/^future margin/i.test(id)) return "Futures";
+  if (ATTR_SAGB.test(id)) return "Bonds";
+  if (ATTR_CONTRACT.test(id)) return "Futures";
+  return "Equity";
+}
+
+function attributionIsEquity(row) {
+  return attributionKind(row) === "Equity";
+}
+
 /** Reads one PORT export. Returns what was found so the caller can say so. */
 async function importAttributionFromFile(file) {
   const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
@@ -248,18 +279,21 @@ async function importAttributionFromFile(file) {
       return;
     }
     const wgt = cell(s.row, "Avg % Wgt|Port");
+    // what it is, and separately what it is called: a line the holdings can name is still
+    // cash if cash is what it is
+    const kind = attributionKind(s);
     let name = attributionLookupName(s.id, names);
-    let kind = "Equity", expiry = null;
+    let expiry = null;
     if (!name) {
       const upper = s.id.toUpperCase();
-      if (ATTR_CURRENCIES[upper]) { name = ATTR_CURRENCIES[upper]; kind = "Cash"; }
-      else if (/^future margin/i.test(s.id)) { name = "Futures margin"; kind = "Futures"; }
-      else if (ATTR_SAGB.test(s.id)) { name = attributionBondLabel(s.id); kind = "Bonds"; }
+      if (ATTR_CURRENCIES[upper]) name = ATTR_CURRENCIES[upper];
+      else if (/^future margin/i.test(s.id)) name = "Futures margin";
+      else if (ATTR_SAGB.test(s.id)) name = attributionBondLabel(s.id);
       else if (ATTR_CONTRACT.test(s.id) && wgt !== null) {
         const twin = (byWeight.get((-wgt).toFixed(9)) || []).find(t => ATTR_CASH_LEG.test(t.id));
         if (twin) {
           const lab = attributionFuturesLabel(twin.id);
-          name = lab.name; expiry = lab.expiry; kind = "Futures";
+          name = lab.name; expiry = lab.expiry;
         }
       }
     }

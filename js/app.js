@@ -402,7 +402,17 @@ function renderAttributionSection() {
     // so each is sorted and picked on its own measure. Showing the table's selection on the
     // chart would rank positions by weight while having chosen them by return, which is the
     // kind of chart that looks fine and means nothing.
-    const byWeight = a.rows.filter(r => r.aWgt !== null && r.aWgt !== undefined && r.aWgt !== 0)
+    // Equities only narrows this step alone. The step above must keep every line, because
+    // its whole claim is that the contributions add up to the fund return, and a filtered
+    // version of that is simply a wrong number.
+    const equityOnly = document.getElementById("attributionEquityOnly").checked;
+    const inScope = r => !equityOnly || attributionIsEquity(r);
+    const setAside = equityOnly ? a.rows.filter(r => !attributionIsEquity(r)
+      && ((r.aWgt !== null && r.aWgt !== undefined && r.aWgt !== 0)
+          || (r.attr !== null && r.attr !== undefined))) : [];
+
+    const byWeight = a.rows.filter(r => inScope(r)
+                           && r.aWgt !== null && r.aWgt !== undefined && r.aWgt !== 0)
                            .sort((x, y) => y.aWgt - x.aWgt);
     const shownW = pick(byWeight).map(r => ({
       label: r.name + (r.expiry ? ` · ${r.expiry}` : ""),
@@ -411,12 +421,24 @@ function renderAttributionSection() {
     renderAttributionWeightChart(shownW);
     const over = byWeight.filter(r => r.aWgt > 0).length;
     const notHeld = byWeight.filter(r => r.wgt === null || r.wgt === undefined).length;
+    // Named and totalled rather than silently removed: the cash and the futures are a real
+    // part of why the fund did not track the index, and someone reading an equities-only
+    // chart is entitled to know how much was put to one side to get it.
+    let aside = "";
+    if (setAside.length) {
+      const w = setAside.reduce((t, r) => t + (r.aWgt || 0), 0);
+      const e = setAside.reduce((t, r) => t + (r.attr || 0), 0);
+      const kinds = [...new Set(setAside.map(r => attributionKind(r).toLowerCase()))].sort();
+      aside = ` Set aside: ${setAside.length} non-equity line${setAside.length > 1 ? "s" : ""} `
+        + `(${kinds.join(", ")}), ${pc(w)} of active weight and ${pc(e, 3)} of effect.`;
+    }
     document.getElementById("attributionWeightSub").textContent =
       `Fund weight less ${a.benchmark || "index"} weight, biggest positions either way. `
       + `${over} of ${byWeight.length} are overweights`
-      + (notHeld ? `, and ${notHeld} are index members the fund did not hold at all.` : ".");
+      + (notHeld ? `, and ${notHeld} are index members the fund did not hold at all.` : ".")
+      + aside;
 
-    const attr = a.rows.filter(r => r.attr !== null && r.attr !== undefined)
+    const attr = a.rows.filter(r => inScope(r) && r.attr !== null && r.attr !== undefined)
                        .sort((x, y) => y.attr - x.attr);
     const shownA = pick(attr);
     const maxA = Math.max(...shownA.map(r => Math.abs(r.attr)), 0) || 1;
@@ -1591,7 +1613,7 @@ function renderLookThroughPositions(positions) {
 }
 
 /* ---------- Attribution ---------- */
-["attributionFund", "attributionCount"].forEach(id => {
+["attributionFund", "attributionCount", "attributionEquityOnly"].forEach(id => {
   document.getElementById(id).addEventListener("change", renderAttributionSection);
 });
 
