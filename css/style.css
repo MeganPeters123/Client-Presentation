@@ -326,3 +326,10 @@ table.data-table td.attr-strong{ font-weight:650; }
 /* the tables here are reference, not figures, so they read left-aligned and wrap */
 #howToCard table.data-table td{ white-space:normal; vertical-align:top; line-height:1.55; }
 #howToCard table.data-table th{ white-space:nowrap; }
+/* the file paths under each tile's description — set apart from the prose above them, and
+   allowed to break, because a Windows path is longer than any table cell wants to be */
+.howto-path{ margin-top:7px; padding-top:7px; border-top:1px dashed var(--grid); }
+.howto-path div{ margin-top:3px; }
+.howto-path div:first-child{ margin-top:0; }
+#howToCard .howto-path code{ white-space:normal; word-break:break-word; font-size:11.5px;
+  background:transparent; border:0; padding:0; color:var(--ink-2); }

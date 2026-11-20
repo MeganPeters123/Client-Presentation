@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aylett & Co — AUM Dashboard</title>
-<link rel="stylesheet" href="css/style.css?v=ad67b72a">
+<link rel="stylesheet" href="css/style.css?v=f8fd7439">
 </head>
 <body>
 
@@ -854,17 +854,24 @@
           <div class="step-sub">Every tile on the Data tab, what it expects, and how often it changes</div>
         </div>
       </div>
+      <p class="howto-p">
+        Everything below lives in the <strong>Funds &ndash; Documents</strong> SharePoint library.
+        Synced to your own machine that is
+        <code>%USERPROFILE%\Aylett &amp; Co\Funds - Documents</code> &mdash; paste that into an
+        Explorer address bar and it resolves under your own user folder. The paths in the table
+        are relative to it.
+      </p>
       <div class="table-scroll">
         <table class="data-table">
           <thead><tr><th>Tile</th><th>What to drop on it</th><th>Drives</th><th>How often</th></tr></thead>
           <tbody>
-            <tr><td><strong>Fund Holdings</strong></td><td>Position-level valuation exports, one file per fund. The format is worked out for you &mdash; there is nothing to map.</td><td>Fund totals, allocation, exposure, holdings</td><td>Monthly</td></tr>
-            <tr><td><strong>Trade Records</strong></td><td>Broker or platform trade reports. Several files at once is fine, each with its own column layout.</td><td>Trades</td><td>Monthly</td></tr>
-            <tr><td><strong>Attribution</strong></td><td>Bloomberg PORT exports, one per fund, such as <code>2026.10 - BAL 1Y.xlsx</code>. They must all cover the same period.</td><td>Attribution</td><td>Monthly</td></tr>
-            <tr><td><strong>Index Weights</strong></td><td><code>Index Weights - Month End.csv</code> from the benchmark pipeline.</td><td>Active Share, and the names of index members on the Attribution tab</td><td>Monthly</td></tr>
-            <tr><td><strong>SA Revenue Split</strong></td><td>The analyst workbook&rsquo;s &ldquo;SA Income Categories&rdquo; tab.</td><td>The look-through allocation</td><td>When the research changes</td></tr>
-            <tr><td><strong>GICS Sectors</strong></td><td><code>GICS.xlsx</code> &mdash; ticker, SEDOL and sector.</td><td>The sector split</td><td>When the research changes</td></tr>
-            <tr><td><strong>AUM History</strong>, <strong>Asset Allocation</strong></td><td>Simple date-and-total or category-and-value files. Only needed to build a view by hand rather than from holdings.</td><td>Overview and Allocation, without holdings</td><td>Rarely</td></tr>
+            <tr><td><strong>Fund Holdings</strong></td><td>Position-level valuation exports, one file per fund. The format is worked out for you &mdash; there is nothing to map.<div class="howto-path"><div><code>Reports\Daily Pres\UTs\&lt;year&gt;\ &mdash; unit trusts</code></div><div><code>Reports\Daily Pres\Segs\ &mdash; segregated mandates</code></div><div><code>Reports\Daily Curo\&lt;year&gt;\ &mdash; Curo valuations</code></div><div><code>Reports\Daily MFS\ &mdash; external mandates</code></div></div></td><td>Fund totals, allocation, exposure, holdings</td><td>Monthly</td></tr>
+            <tr><td><strong>Trade Records</strong></td><td>Broker or platform trade reports. Several files at once is fine, each with its own column layout.<div class="howto-path"><div><code>Fund Accounting Tools\Presentation Dashboard\Trades History\</code></div></div></td><td>Trades</td><td>Monthly</td></tr>
+            <tr><td><strong>Attribution</strong></td><td>Bloomberg PORT exports, one per fund, such as <code>2026.10 - BAL 1Y.xlsx</code>. They must all cover the same period.<div class="howto-path"><div><code>Fund Accounting Tools\Attribution\Raw Data\&lt;year&gt;\</code></div></div></td><td>Attribution</td><td>Monthly</td></tr>
+            <tr><td><strong>Index Weights</strong></td><td><code>Index Weights - Month End.csv</code> from the benchmark pipeline.<div class="howto-path"><div><code>Reports\Indices\</code></div></div></td><td>Active Share, and the names of index members on the Attribution tab</td><td>Monthly</td></tr>
+            <tr><td><strong>SA Revenue Split</strong></td><td>The <code>Analyst Call Data.xlsx</code> workbook, sheet &ldquo;SA Income Categories&rdquo;.<div class="howto-path"><div><code>Fund Accounting Tools\</code></div></div></td><td>The look-through allocation</td><td>When the research changes</td></tr>
+            <tr><td><strong>GICS Sectors</strong></td><td><code>GICS.xlsx</code> &mdash; ticker, SEDOL and sector.<div class="howto-path"><div><code>Fund Accounting Tools\Presentation Dashboard\</code></div></div></td><td>The sector split</td><td>When the research changes</td></tr>
+            <tr><td><strong>AUM History</strong>, <strong>Asset Allocation</strong></td><td>Simple date-and-total or category-and-value files. Only needed to build a view by hand rather than from holdings.<div class="howto-path"><div>No fixed source &mdash; you build these yourself.</div></div></td><td>Overview and Allocation, without holdings</td><td>Rarely</td></tr>
           </tbody>
         </table>
       </div>
