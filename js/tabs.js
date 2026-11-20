@@ -10,7 +10,12 @@
 
 const TAB_STORAGE_KEY = "aum-dashboard-tab";
 const TAB_NAMES = ["overview", "allocation", "exposure", "holdings", "activeshare",
-                   "attribution", "trades", "data"];
+                   "attribution", "trades", "data", "howto"];
+
+// Tabs that are worth opening whether or not anything has been loaded. Everything else is a
+// view of the figures and has nothing to say without them; these two are what you read when
+// the figures are exactly what you have not got yet.
+const TAB_ALWAYS_READY = ["data", "howto"];
 
 let activeTab = null;
 // Until someone clicks a tab, a first-time visitor starts on Data and is moved to Overview as
@@ -22,7 +27,7 @@ function tabPanels(name) {
 }
 
 function tabHasContent(name) {
-  if (name === "data") return true;
+  if (TAB_ALWAYS_READY.includes(name)) return true;
   return tabPanels(name).some(el => el.style.display !== "none");
 }
 
@@ -31,7 +36,8 @@ function refreshTabState() {
     btn.classList.toggle("is-empty", !tabHasContent(btn.dataset.target));
   });
   const empty = document.getElementById("tabEmpty");
-  if (activeTab !== "data" && !tabHasContent(activeTab)) {
+  // one rule, in TAB_ALWAYS_READY: the data and how-to tabs are never "empty"
+  if (!tabHasContent(activeTab)) {
     empty.innerHTML = 'Nothing to show here yet. Sign in or upload files on the ' +
       '<a href="#" data-goto="data">Data</a> tab.';
     empty.style.display = "block";

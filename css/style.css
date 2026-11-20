@@ -308,3 +308,21 @@ table.data-table td.attr-strong{ font-weight:650; }
 @media (max-width: 720px){
   table.data-table th.bar-col, table.data-table td.bar-col{ display:none; }
 }
+
+/* ---------- the how-to tab ---------- */
+/* Prose, which the rest of the dashboard has almost none of: every other card is a figure or
+   a control. Held to a readable measure rather than the full card width, because a line of
+   text running the width of a 1400px screen is the one thing that makes instructions look
+   like something to skip. */
+.howto-p{ margin:0 0 10px; color:var(--ink-2); font-size:13px; line-height:1.6; max-width:76ch; }
+.howto-p strong{ color:var(--ink); font-weight:650; }
+.howto-list{ margin:0 0 10px; padding-left:20px; color:var(--ink-2); font-size:13px;
+  line-height:1.6; max-width:76ch; }
+.howto-list li{ margin-bottom:7px; }
+.howto-list strong{ color:var(--ink); font-weight:650; }
+#howToCard code{ font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size:12px; background:var(--surface-2); border:1px solid var(--border);
+  border-radius:4px; padding:1px 5px; white-space:nowrap; }
+/* the tables here are reference, not figures, so they read left-aligned and wrap */
+#howToCard table.data-table td{ white-space:normal; vertical-align:top; line-height:1.55; }
+#howToCard table.data-table th{ white-space:nowrap; }

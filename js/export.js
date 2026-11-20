@@ -17,8 +17,13 @@ const EXPORT_SCALE = 3;          // a 700px-wide chart lands as ~2100px, sharp a
 /** Every block worth exporting on its own: each step of a tab, plus the Overview cards,
  *  which have no steps but do have a chart or a table in them. */
 function exportableBlocks() {
-  const blocks = Array.from(document.querySelectorAll(".flow-step"));
+  // A card can opt out. The how-to tab is built from the same steps and tables as everything
+  // else, so without this it grew a Copy and a PNG button on "Dragging files in" — six sets
+  // of controls offering to put the instructions on a slide.
+  const wanted = el => !el.closest("[data-no-export]");
+  const blocks = Array.from(document.querySelectorAll(".flow-step")).filter(wanted);
   document.querySelectorAll(".card").forEach(card => {
+    if (!wanted(card)) return;
     if (card.querySelector(".flow-step")) return;                 // its steps are the blocks
     if (card.querySelector("canvas, table")) blocks.push(card);
   });

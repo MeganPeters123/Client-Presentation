@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aylett & Co — AUM Dashboard</title>
-<link rel="stylesheet" href="css/style.css?v=d06f8c2b">
+<link rel="stylesheet" href="css/style.css?v=ad67b72a">
 </head>
 <body>
 
@@ -35,6 +35,7 @@
     <button class="tab" role="tab" data-target="attribution">Attribution</button>
     <button class="tab" role="tab" data-target="trades">Trades</button>
     <button class="tab" role="tab" data-target="data">Data</button>
+    <button class="tab" role="tab" data-target="howto">How to</button>
   </nav>
   <div class="empty-hint tab-empty" id="tabEmpty" style="display:none;"></div>
 
@@ -785,6 +786,153 @@
     </div>
   </div>
 
+  <div id="howToCard" data-tab="howto" class="card" data-no-export>
+    <div class="card-head">
+      <div>
+        <div class="card-title">How to use this dashboard</div>
+        <div class="card-subtitle">Loading the saved figures, updating them, and what to do when something looks wrong</div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-head">
+        <span class="step-num">1</span>
+        <div>
+          <div class="step-title">If you only want to look at the figures</div>
+          <div class="step-sub">Two clicks, and nothing to upload</div>
+        </div>
+      </div>
+      <p class="howto-p">
+        Go to the <strong>Data</strong> tab, sign in with your Aylett address under
+        <strong>Saved history</strong>, then press <strong>Load latest</strong>. That pulls the whole
+        saved history down and fills every tab. You do not need any files.
+      </p>
+      <p class="howto-p">
+        The figures stay in your own browser once loaded, so they are there next time. If the central
+        copy has been rebuilt since, a bar appears at the top of the page offering
+        <strong>Load latest</strong> again &mdash; that is the only thing that refreshes the numbers.
+      </p>
+      <div class="gap-note">
+        Signed out, the page shows nothing at all. That is deliberate: the figures can be read only
+        once you are signed in, and none of them are stored in the page itself.
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-head">
+        <span class="step-num">2</span>
+        <div>
+          <div class="step-title">What is on each tab</div>
+          <div class="step-sub">And what each one needs before it shows anything</div>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>Tab</th><th>What it shows</th><th>Needs</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Overview</strong></td><td>Total AUM, every fund&rsquo;s latest figure, and what changed between two months</td><td>The saved history</td></tr>
+            <tr><td><strong>Allocation</strong></td><td>Asset classes, currency, and the look-through to where the underlying shares really earn their money</td><td>The saved history, plus SA Revenue Split and GICS for the look-through and sector splits</td></tr>
+            <tr><td><strong>Exposure</strong></td><td>The same money grouped by where the exposure actually sits</td><td>The saved history</td></tr>
+            <tr><td><strong>Holdings</strong></td><td>The ten largest positions, and what changed between two months</td><td>The saved history</td></tr>
+            <tr><td><strong>Active Share</strong></td><td>How far a fund sits from its index, month by month</td><td>The saved history <em>and</em> Index Weights</td></tr>
+            <tr><td><strong>Attribution</strong></td><td>What drove each fund&rsquo;s return, and what it was worth against the index</td><td>The Bloomberg PORT exports</td></tr>
+            <tr><td><strong>Trades</strong></td><td>What was bought and sold, by month and by security</td><td>The saved history</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="howto-p">
+        A tab whose data is not loaded is dimmed in the bar above and says so when you open it. That
+        means something is missing, not that it is broken.
+      </p>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-head">
+        <span class="step-num">3</span>
+        <div>
+          <div class="step-title">Which file goes where</div>
+          <div class="step-sub">Every tile on the Data tab, what it expects, and how often it changes</div>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>Tile</th><th>What to drop on it</th><th>Drives</th><th>How often</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Fund Holdings</strong></td><td>Position-level valuation exports, one file per fund. The format is worked out for you &mdash; there is nothing to map.</td><td>Fund totals, allocation, exposure, holdings</td><td>Monthly</td></tr>
+            <tr><td><strong>Trade Records</strong></td><td>Broker or platform trade reports. Several files at once is fine, each with its own column layout.</td><td>Trades</td><td>Monthly</td></tr>
+            <tr><td><strong>Attribution</strong></td><td>Bloomberg PORT exports, one per fund, such as <code>2026.10 - BAL 1Y.xlsx</code>. They must all cover the same period.</td><td>Attribution</td><td>Monthly</td></tr>
+            <tr><td><strong>Index Weights</strong></td><td><code>Index Weights - Month End.csv</code> from the benchmark pipeline.</td><td>Active Share, and the names of index members on the Attribution tab</td><td>Monthly</td></tr>
+            <tr><td><strong>SA Revenue Split</strong></td><td>The analyst workbook&rsquo;s &ldquo;SA Income Categories&rdquo; tab.</td><td>The look-through allocation</td><td>When the research changes</td></tr>
+            <tr><td><strong>GICS Sectors</strong></td><td><code>GICS.xlsx</code> &mdash; ticker, SEDOL and sector.</td><td>The sector split</td><td>When the research changes</td></tr>
+            <tr><td><strong>AUM History</strong>, <strong>Asset Allocation</strong></td><td>Simple date-and-total or category-and-value files. Only needed to build a view by hand rather than from holdings.</td><td>Overview and Allocation, without holdings</td><td>Rarely</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="gap-note">
+        The monthly history is built from the valuation files by a script and pushed centrally, so in
+        a normal month nobody needs to drag anything. The tiles are for the reference files above,
+        for a fund whose file arrived late, and for trying something before it is built properly.
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-head">
+        <span class="step-num">4</span>
+        <div>
+          <div class="step-title">Dragging files in</div>
+          <div class="step-sub">What to expect while it reads them</div>
+        </div>
+      </div>
+      <ul class="howto-list">
+        <li>Drag a file onto its tile, or click the tile and pick it. Holdings, trades and attribution take <strong>several files at once</strong>.</li>
+        <li>A tile that has loaded turns green and says what it found &mdash; how many funds, how many months. If it does not, the file did not go in.</li>
+        <li>Everything is read <strong>in your browser</strong>. The files themselves are never sent anywhere.</li>
+        <li>While you are signed in, the SA revenue split, GICS, index weights and attribution are saved centrally, so the next person does not have to upload them again. The holdings history is not &mdash; that comes from the monthly build.</li>
+        <li><strong>Save this period</strong> on the Overview tab keeps a month in <em>this browser only</em>. Use <strong>Export history (.json)</strong> and <strong>Import history</strong> to carry a set of figures to another machine.</li>
+      </ul>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-head">
+        <span class="step-num">5</span>
+        <div>
+          <div class="step-title">Putting it in a pack</div>
+          <div class="step-sub">Every table and chart can be lifted out on its own</div>
+        </div>
+      </div>
+      <p class="howto-p">
+        Hover over any numbered block for <strong>Copy</strong> and <strong>PNG</strong>, with a menu
+        to take just the table, just the chart, or the whole step. Copy puts the picture straight on
+        the clipboard to paste into a slide; PNG saves it as a file. The buttons themselves never
+        appear in the picture.
+      </p>
+    </div>
+
+    <div class="flow-step">
+      <div class="step-head">
+        <span class="step-num">6</span>
+        <div>
+          <div class="step-title">If something looks wrong</div>
+          <div class="step-sub">The handful of things that do go wrong, and what fixes them</div>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead><tr><th>What you see</th><th>What it means</th><th>What to do</th></tr></thead>
+          <tbody>
+            <tr><td>Figures look out of date</td><td>Your browser is holding an older copy</td><td><strong>Load latest</strong> on the Data tab, or the bar at the top of the page</td></tr>
+            <tr><td>The page itself looks old after a change</td><td>The browser cached the page</td><td><strong>Ctrl+F5</strong> once</td></tr>
+            <tr><td>A tab is dimmed or empty</td><td>That data is not loaded</td><td>Load it, or check which tile it comes from in steps 2 and 3</td></tr>
+            <tr><td>Attribution shows a code like <code>NPN SJ</code> instead of a name</td><td>The index weights were saved before names were read out of them</td><td>Upload <code>Index Weights - Month End.csv</code> again</td></tr>
+            <tr><td>Attribution shows only some funds</td><td>Only those files were uploaded. Files covering a different period replace what is there rather than joining it.</td><td>Upload the whole set for one period together</td></tr>
+            <tr><td>A fund is missing from the total</td><td>Nothing was saved for it near that month</td><td>Read the note under the funds table &mdash; it names them and gives the last figure each one had</td></tr>
+            <tr><td>A fund shows an older figure</td><td>Its file had not arrived, so the last one is carried forward</td><td>Nothing, unless the file now exists. The note says which fund and which month it is standing on.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <div class="empty-hint" id="emptyHint">
     <svg viewBox="0 0 24 24" fill="none"><path d="M4 19V10M12 19V5M20 19V13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
     <div>Upload at least one file above to build the dashboard.</div>
@@ -835,8 +983,8 @@
 <script src="js/activeshare.js?v=87ff88a8"></script>
 <script src="js/attribution.js?v=2591d094"></script>
 <script src="js/charts.js?v=b31600c0"></script>
-<script src="js/tabs.js?v=0e8fb5b8"></script>
+<script src="js/tabs.js?v=b78e3903"></script>
 <script src="js/app.js?v=8cca226d"></script>
-<script src="js/export.js?v=8ea64502"></script>
+<script src="js/export.js?v=c93eaddd"></script>
 </body>
 </html>
