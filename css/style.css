@@ -342,3 +342,13 @@ table.data-table td.attr-strong{ font-weight:650; }
 .howto-sub ol.howto-list{ padding-left:18px; }
 .howto-sub ol.howto-list li{ margin-bottom:10px; }
 .howto-sub .howto-path{ border-top-style:solid; }
+/* attribution uploads, grouped by the window they cover: the chips are the only place that
+   shows everything held rather than the one window on screen, so the window has to be a
+   heading rather than another chip */
+.source-group{ margin-top:8px; }
+.source-group:first-child{ margin-top:4px; }
+.source-group-head{ display:flex; align-items:center; gap:8px; font-size:11.5px;
+  font-weight:650; color:var(--ink-2); padding:3px 0 5px; }
+.source-group-head .n{ font-weight:400; color:var(--ink-muted); }
+.source-group-head .rm{ margin-left:auto; cursor:pointer; color:var(--ink-muted); padding:0 3px; }
+.source-group-head .rm:hover{ color:var(--bad); }

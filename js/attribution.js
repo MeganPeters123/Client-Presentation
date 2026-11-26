@@ -41,16 +41,49 @@ const ATTRIBUTION_FUNDS = {
   AYHF01_R: "Aylett Prescient QI Hedge Fund"
 };
 
+/* The store holds several windows at once, keyed by the window itself.
+ *
+ * It used to hold exactly one: a file from a different window cleared everything, so that
+ * the tab could never show two funds over two periods and look like it was comparing them.
+ * That reasoning still holds for what is *on screen* — one window at a time is the only
+ * honest way to read a contribution table — but it was the wrong place to enforce it. A
+ * single YTD file uploaded to take a look wiped six 1Y funds that had taken a morning to
+ * assemble, and nothing said it would until they were gone.
+ *
+ * So the store keeps every window and the selector decides which one is shown. Nothing is
+ * ever compared across windows, because only one is rendered at a time.
+ */
 let attributionStore = loadAttributionStore();
+
+/** The old single-window shape, carried forward rather than dropped.
+ *  Anything saved before this — in a browser or in the shared store — is one window with no
+ *  key, and discarding it would throw away whatever someone last uploaded. */
+function migrateAttributionStore(raw) {
+  if (!raw || typeof raw !== "object") return { periods: {}, loadedAt: null };
+  if (raw.periods) return raw;                                   // already the new shape
+  if (!raw.funds || !Object.keys(raw.funds).length) return { periods: {}, loadedAt: null };
+  const key = attributionPeriodKey(raw.period);
+  return {
+    periods: {
+      [key]: {
+        raw: raw.period || "",
+        funds: raw.funds,
+        files: raw.files || [],
+        loadedAt: raw.loadedAt || null
+      }
+    },
+    loadedAt: raw.loadedAt || null
+  };
+}
 
 function loadAttributionStore() {
   try {
     const raw = localStorage.getItem(ATTRIBUTION_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) return migrateAttributionStore(JSON.parse(raw));
   } catch (e) {
     console.error("Could not read the saved attribution", e);
   }
-  return { period: null, funds: {}, files: [], loadedAt: null };
+  return { periods: {}, loadedAt: null };
 }
 
 function persistAttribution() {
@@ -65,16 +98,66 @@ function persistAttribution() {
 }
 
 function clearAttribution() {
-  attributionStore = { period: null, funds: {}, files: [], loadedAt: null };
+  attributionStore = { periods: {}, loadedAt: null };
   persistAttribution();
 }
 
-function listAttributionFunds() {
-  return Object.keys(attributionStore.funds || {}).sort();
+/** A stable key for a window, from the two dates PORT writes into "As Of Date".
+ *  Keyed on the dates rather than the whole string so the same window still matches if
+ *  Bloomberg ever changes the wording or the timezone around them. */
+function attributionPeriodKey(raw) {
+  const m = String(raw || "").match(/from\s+(.+?)\s+to\s+(.+)$/i);
+  // local date parts, not toISOString: PORT writes midnight local, and converting that to
+  // UTC moves it to the day before, so the key would read a day earlier than the label
+  // built from the same string
+  const iso = s => {
+    const d = new Date(String(s).replace(/\s*GMT.*$/, ""));
+    if (isNaN(d)) return null;
+    const pad = n => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+  if (m) {
+    const a = iso(m[1]), b = iso(m[2]);
+    if (a && b) return `${a}|${b}`;
+  }
+  return String(raw || "unknown").trim() || "unknown";
 }
 
-function attributionFor(fund) {
-  return (attributionStore.funds || {})[fund] || null;
+/** Windows held, newest last-day first — which is the order someone wants to pick from. */
+function listAttributionPeriods() {
+  return Object.keys(attributionStore.periods || {}).sort((a, b) => {
+    const end = k => (k.split("|")[1] || k);
+    const start = k => (k.split("|")[0] || k);
+    return end(b).localeCompare(end(a)) || start(b).localeCompare(start(a));
+  });
+}
+
+function attributionPeriod(key) {
+  return (attributionStore.periods || {})[key] || null;
+}
+
+function listAttributionFunds(key) {
+  const p = attributionPeriod(key || listAttributionPeriods()[0]);
+  return p ? Object.keys(p.funds || {}).sort() : [];
+}
+
+function attributionFor(fund, key) {
+  const p = attributionPeriod(key || listAttributionPeriods()[0]);
+  return p ? (p.funds || {})[fund] || null : null;
+}
+
+function removeAttributionPeriod(key) {
+  if (!attributionStore.periods) return;
+  delete attributionStore.periods[key];
+  persistAttribution();
+}
+
+function removeAttributionFund(key, fund) {
+  const p = attributionPeriod(key);
+  if (!p) return;
+  delete p.funds[fund];
+  if (!Object.keys(p.funds).length) delete attributionStore.periods[key];
+  persistAttribution();
 }
 
 /* ---------- naming ---------- */
@@ -331,13 +414,16 @@ async function importAttributionFromFile(file) {
 
   const period = String(meta["As Of Date"] || "").trim();
   const fund = ATTRIBUTION_FUNDS[universe.toUpperCase()] || universe;
-  // One period at a time, by choice: a file from a different window replaces what is held
-  // rather than sitting beside it, so the tab can never show two funds over two periods and
-  // look like it is comparing them.
-  const replaced = attributionStore.period && period && attributionStore.period !== period;
-  if (replaced) attributionStore = { period: null, funds: {}, files: [], loadedAt: null };
-  attributionStore.period = period || attributionStore.period;
-  attributionStore.funds[fund] = {
+  // Filed under its own window, beside whatever else is held. A file only ever replaces the
+  // same fund over the same window, which is a re-run of that export and nothing else.
+  const periodKey = attributionPeriodKey(period);
+  if (!attributionStore.periods) attributionStore.periods = {};
+  const bucket = (attributionStore.periods[periodKey] = attributionStore.periods[periodKey] || {
+    raw: period, funds: {}, files: [], loadedAt: null
+  });
+  const newPeriod = !Object.keys(bucket.funds).length;
+  bucket.raw = period || bucket.raw;
+  bucket.funds[fund] = {
     universe, fund,
     benchmark: String(meta["Benchmark Name"] || "").trim() || null,
     hasBenchmark,
@@ -349,11 +435,12 @@ async function importAttributionFromFile(file) {
     rows,
     fileName: file.name
   };
-  attributionStore.files = [...new Set([...(attributionStore.files || []), file.name])];
-  attributionStore.loadedAt = new Date().toISOString();
+  bucket.files = [...new Set([...(bucket.files || []), file.name])];
+  bucket.loadedAt = new Date().toISOString();
+  attributionStore.loadedAt = bucket.loadedAt;
   persistAttribution();
   return {
-    fund, universe, hasBenchmark, replaced,
+    fund, universe, hasBenchmark, periodKey, newPeriod,
     holdings: rows.length, droppedLegs,
     unnamed: rows.filter(r => !r.named).length
   };
@@ -361,8 +448,9 @@ async function importAttributionFromFile(file) {
 
 /** The window the figures cover, as a person would say it.
  *  PORT writes "From Fri Oct 31 2025 00:00:00 GMT+0200 to Sat Oct 31 2026 00:00:00 GMT+0200". */
-function attributionPeriodLabel() {
-  const raw = attributionStore.period || "";
+function attributionPeriodLabel(key) {
+  const p = attributionPeriod(key || listAttributionPeriods()[0]);
+  const raw = (p && p.raw) || "";
   const m = raw.match(/from\s+(.+?)\s+to\s+(.+)$/i);
   const tidy = s => {
     const d = new Date(String(s).replace(/\s*GMT.*$/, ""));

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aylett & Co — AUM Dashboard</title>
-<link rel="stylesheet" href="css/style.css?v=e3925167">
+<link rel="stylesheet" href="css/style.css?v=4eccf93a">
 </head>
 <body>
 
@@ -124,7 +124,7 @@
         <div class="upload-slot" id="slot-attribution" data-kind="attribution">
           <svg viewBox="0 0 24 24" fill="none"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3M12 3v12m0 0l-4-4m4 4l4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <h3>Attribution</h3>
-          <p>Bloomberg PORT exports, one file per fund (e.g. "2026.10 - BAL 1Y.xlsx"). Drives contribution and attribution. All files must cover the same period.</p>
+          <p>Bloomberg PORT exports, one file per fund (e.g. "2026.10 - BAL 1Y.xlsx"). Drives contribution and attribution. Windows are kept side by side &mdash; pick one on the Attribution tab.</p>
           <div class="status" id="status-attribution"></div>
           <div class="source-list" id="attributionSourceList"></div>
           <input type="file" id="file-attribution" accept=".xlsx,.xlsm,.xls" multiple>
@@ -592,6 +592,7 @@
         <div class="card-subtitle" id="attributionSubtitle">What drove the return, and what it was worth against the index</div>
       </div>
       <div class="funds-controls">
+        <select id="attributionPeriod" title="Which window the figures cover"></select>
         <select id="attributionFund"></select>
         <select id="attributionCount" title="How many holdings to show each side">
           <option value="10">Top 10 each way</option>
@@ -867,7 +868,7 @@
           <tbody>
             <tr><td><strong>Fund Holdings</strong></td><td>Position-level valuation exports, one file per fund. The format is worked out for you &mdash; there is nothing to map.<div class="howto-path"><div><code>Reports\Daily Pres\UTs\&lt;year&gt;\ &mdash; unit trusts</code></div><div><code>Reports\Daily Pres\Segs\ &mdash; segregated mandates</code></div><div><code>Reports\Daily Curo\&lt;year&gt;\ &mdash; Curo valuations</code></div><div><code>Reports\Daily MFS\ &mdash; external mandates</code></div><div><code>Fund - Hedge\Monthly NAV\ &mdash; hedge fund, see below</code></div></div></td><td>Fund totals, allocation, exposure, holdings</td><td>Monthly</td></tr>
             <tr><td><strong>Trade Records</strong></td><td>Broker or platform trade reports. Several files at once is fine, each with its own column layout.<div class="howto-path"><div><code>Fund Accounting Tools\Presentation Dashboard\Trades History\</code></div></div></td><td>Trades</td><td>Monthly</td></tr>
-            <tr><td><strong>Attribution</strong></td><td>Bloomberg PORT exports, one per fund, such as <code>2026.10 - BAL 1Y.xlsx</code>. They must all cover the same period.<div class="howto-path"><div><code>Fund Accounting Tools\Attribution\Raw Data\&lt;year&gt;\</code></div></div></td><td>Attribution</td><td>Monthly</td></tr>
+            <tr><td><strong>Attribution</strong></td><td>Bloomberg PORT exports, one per fund, such as <code>2026.10 - BAL 1Y.xlsx</code>. A 1Y, a YTD and a quarter can all be loaded; the Attribution tab has a selector for which window to show.<div class="howto-path"><div><code>Fund Accounting Tools\Attribution\Raw Data\&lt;year&gt;\</code></div></div></td><td>Attribution</td><td>Monthly</td></tr>
             <tr><td><strong>Index Weights</strong></td><td><code>Index Weights - Month End.csv</code> from the benchmark pipeline.<div class="howto-path"><div><code>Reports\Indices\</code></div></div></td><td>Active Share, and the names of index members on the Attribution tab</td><td>Monthly</td></tr>
             <tr><td><strong>SA Revenue Split</strong></td><td>The <code>Analyst Call Data.xlsx</code> workbook, sheet &ldquo;SA Income Categories&rdquo;.<div class="howto-path"><div><code>Fund Accounting Tools\</code></div></div></td><td>The look-through allocation</td><td>When the research changes</td></tr>
             <tr><td><strong>GICS Sectors</strong></td><td><code>GICS.xlsx</code> &mdash; ticker, SEDOL and sector.<div class="howto-path"><div><code>Fund Accounting Tools\Presentation Dashboard\</code></div></div></td><td>The sector split</td><td>When the research changes</td></tr>
@@ -977,7 +978,7 @@
             <tr><td>The page itself looks old after a change</td><td>The browser cached the page</td><td><strong>Ctrl+F5</strong> once</td></tr>
             <tr><td>A tab is dimmed or empty</td><td>That data is not loaded</td><td>Load it, or check which tile it comes from in steps 2 and 3</td></tr>
             <tr><td>Attribution shows a code like <code>NPN SJ</code> instead of a name</td><td>The index weights were saved before names were read out of them</td><td>Upload <code>Index Weights - Month End.csv</code> again</td></tr>
-            <tr><td>Attribution shows only some funds</td><td>Only those files were uploaded. Files covering a different period replace what is there rather than joining it.</td><td>Upload the whole set for one period together</td></tr>
+            <tr><td>Attribution shows only some funds</td><td>Only those files were uploaded for the window you are looking at. Each window keeps its own set.</td><td>Check the window selector first, then upload whichever funds are missing from it</td></tr>
             <tr><td>A fund is missing from the total</td><td>Nothing was saved for it near that month</td><td>Read the note under the funds table &mdash; it names them and gives the last figure each one had</td></tr>
             <tr><td>A fund shows an older figure</td><td>Its file had not arrived, so the last one is carried forward</td><td>The note says which fund and which month it is standing on. If it is the <strong>Hedge Fund</strong>, its valuation has to be pulled by hand &mdash; see step 3.</td></tr>
           </tbody>
@@ -1032,12 +1033,12 @@
 <script src="js/holdings.js?v=619cd99d"></script>
 <script src="js/history.js?v=ed349218"></script>
 <script src="js/lookthrough.js?v=e431cd29"></script>
-<script src="js/cloud.js?v=9f31a82f"></script>
+<script src="js/cloud.js?v=fdc833b8"></script>
 <script src="js/activeshare.js?v=87ff88a8"></script>
-<script src="js/attribution.js?v=2591d094"></script>
+<script src="js/attribution.js?v=7913dbd2"></script>
 <script src="js/charts.js?v=b31600c0"></script>
 <script src="js/tabs.js?v=b78e3903"></script>
-<script src="js/app.js?v=8cca226d"></script>
+<script src="js/app.js?v=0befb677"></script>
 <script src="js/export.js?v=c93eaddd"></script>
 </body>
 </html>

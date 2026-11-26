@@ -231,11 +231,9 @@ function renderSaIncomeSourceList() {
 async function handleUploadMany(kind, files) {
   if (kind !== "attribution") { await handleUpload(kind, files[0]); return; }
   const done = [], failed = [];
-  let replaced = false;
   for (const file of files) {
     try {
       const res = await importAttributionFromFile(file);
-      if (res.replaced) replaced = true;
       done.push(res);
     } catch (err) {
       console.error(file.name, err);
@@ -248,9 +246,12 @@ async function handleUploadMany(kind, files) {
     : `${failed.length} files could not be read — see the console`);
   else if (done.length) {
     const withB = done.filter(d => d.hasBenchmark).length;
+    // say when a window is new, since nothing is replaced any more and the tab opens on
+    // whichever window was selected last — otherwise a first upload looks like it did nothing
+    const fresh = new Set(done.filter(d => d.newPeriod).map(d => d.periodKey)).size;
     showToast(`${done.length} fund${done.length > 1 ? "s" : ""} loaded`
       + (withB ? `, ${withB} with benchmark columns` : "")
-      + (replaced ? " — earlier period cleared" : ""));
+      + (fresh ? ` — ${fresh} new window${fresh > 1 ? "s" : ""}` : ""));
   }
 }
 
@@ -258,28 +259,43 @@ function renderAttributionSourceList() {
   const slot = document.getElementById("slot-attribution");
   const list = document.getElementById("attributionSourceList");
   const status = document.getElementById("status-attribution");
-  const funds = listAttributionFunds();
-  if (!funds.length) {
+  const periods = listAttributionPeriods();
+  if (!periods.length) {
     slot.classList.remove("loaded");
     status.textContent = "";
     list.innerHTML = "";
     return;
   }
   slot.classList.add("loaded");
-  status.textContent = `${funds.length} fund${funds.length > 1 ? "s" : ""} · ${attributionPeriodLabel()}`;
-  list.innerHTML = funds.map(f => {
-    const a = attributionFor(f);
-    return `<div class="source-chip">
-      <span>${escAttr(f)}</span>
-      <span class="n">${a.hasBenchmark ? "vs " + escAttr(a.benchmark || "index") : "contribution only"}</span>
-      <span class="rm" data-fund="${escAttr(f)}" title="Remove">✕</span>
+  const total = periods.reduce((n, k) => n + listAttributionFunds(k).length, 0);
+  status.textContent = `${total} fund${total > 1 ? "s" : ""} across `
+    + `${periods.length} window${periods.length > 1 ? "s" : ""}`;
+  // Grouped by window, because the chips are the only place that shows what is held rather
+  // than what is on screen — and a flat list of funds would hide that the same fund is in
+  // two of them.
+  list.innerHTML = periods.map(k => {
+    const funds = listAttributionFunds(k);
+    const chips = funds.map(f => {
+      const a = attributionFor(f, k);
+      return `<div class="source-chip">
+        <span>${escAttr(f)}</span>
+        <span class="n">${a.hasBenchmark ? "vs " + escAttr(a.benchmark || "index") : "contribution only"}</span>
+        <span class="rm" data-period="${escAttr(k)}" data-fund="${escAttr(f)}" title="Remove this fund">✕</span>
+      </div>`;
+    }).join("");
+    return `<div class="source-group">
+      <div class="source-group-head">
+        <span>${escAttr(attributionPeriodLabel(k))}</span>
+        <span class="n">${funds.length} fund${funds.length > 1 ? "s" : ""}</span>
+        <span class="rm" data-period="${escAttr(k)}" title="Remove this window">✕</span>
+      </div>
+      ${chips}
     </div>`;
   }).join("");
   list.querySelectorAll(".rm").forEach(el => el.addEventListener("click", ev => {
     ev.stopPropagation();
-    delete attributionStore.funds[el.dataset.fund];
-    if (!listAttributionFunds().length) clearAttribution();
-    else persistAttribution();
+    if (el.dataset.fund) removeAttributionFund(el.dataset.period, el.dataset.fund);
+    else removeAttributionPeriod(el.dataset.period);
     renderAttributionSourceList();
     renderAttributionSection();
   }));
@@ -298,8 +314,8 @@ function renderAttributionSection() {
   const card = document.getElementById("attributionCard");
   const empty = document.getElementById("attributionEmpty");
   const body = document.getElementById("attributionBody");
-  const funds = listAttributionFunds();
-  if (!funds.length) {
+  const periods = listAttributionPeriods();
+  if (!periods.length) {
     card.style.display = "none";
     return;
   }
@@ -307,11 +323,22 @@ function renderAttributionSection() {
   empty.style.display = "none";
   body.style.display = "block";
 
+  // The window comes first: it decides which funds there are to choose from. A fund chosen
+  // under one window is kept when switching to another that also has it, so stepping through
+  // windows follows one fund rather than jumping back to the first name every time.
+  const periodSel = document.getElementById("attributionPeriod");
+  const prevPeriod = periodSel.value;
+  periodSel.innerHTML = periods.map(k =>
+    `<option value="${escAttr(k)}">${escAttr(attributionPeriodLabel(k))}</option>`).join("");
+  periodSel.value = periods.includes(prevPeriod) ? prevPeriod : periods[0];
+  periodSel.style.display = periods.length > 1 ? "" : "none";
+
+  const funds = listAttributionFunds(periodSel.value);
   const fundSel = document.getElementById("attributionFund");
   const prev = fundSel.value;
   fundSel.innerHTML = funds.map(f => `<option value="${escAttr(f)}">${escAttr(f)}</option>`).join("");
   fundSel.value = funds.includes(prev) ? prev : funds[0];
-  const a = attributionFor(fundSel.value);
+  const a = attributionFor(fundSel.value, periodSel.value);
 
   const countSel = document.getElementById("attributionCount");
   const limit = Number(countSel.value || 10);
@@ -322,7 +349,7 @@ function renderAttributionSection() {
   const cls = v => v === null || v === undefined ? "" : (v >= 0 ? "delta-up" : "delta-down");
 
   document.getElementById("attributionSubtitle").textContent =
-    `${fundSel.value} · ${attributionPeriodLabel()}`;
+    `${fundSel.value} · ${attributionPeriodLabel(periodSel.value)}`;
   document.getElementById("attributionHeadlineSub").textContent = a.hasBenchmark
     ? `Measured against ${a.benchmark || "the index"}`
     : "This export carried no benchmark columns, so there is no comparison to an index";
@@ -1613,7 +1640,8 @@ function renderLookThroughPositions(positions) {
 }
 
 /* ---------- Attribution ---------- */
-["attributionFund", "attributionCount", "attributionEquityOnly"].forEach(id => {
+["attributionPeriod", "attributionFund", "attributionCount",
+ "attributionEquityOnly"].forEach(id => {
   document.getElementById(id).addEventListener("change", renderAttributionSection);
 });
 

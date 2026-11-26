@@ -183,11 +183,15 @@ async function cloudLoadState() {
       persistIndexWeights();
       found.indexWeights = true;
     }
-    // Replaced outright rather than merged: the attribution is one period's set of funds,
-    // and spreading a newer one over an older would leave a fund from the period before
-    // sitting beside the rest, looking like part of the same comparison.
+    // Replaced outright rather than merged. The store holds every window keyed by window,
+    // so a shallow merge would keep windows this browser had and the central copy no longer
+    // does — resurrecting whatever someone deleted there, on every sign-in.
     if (row.key === "attribution" && row.value && typeof attributionStore !== "undefined") {
-      attributionStore = row.value;
+      // through the migration, not straight in: a value saved before the store held several
+      // windows has no `periods` at all, and assigning it raw leaves every reader looking at
+      // a shape that is simply empty — the whole saved set gone without a word.
+      attributionStore = typeof migrateAttributionStore === "function"
+        ? migrateAttributionStore(row.value) : row.value;
       persistAttribution();
       found.attribution = true;
     }
