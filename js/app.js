@@ -2772,8 +2772,168 @@ if (document.getElementById("cloudPanel")) {
     await renderCloudPanel("Signed out. What is already loaded stays until you reload the page.");
   });
 
+  if (document.getElementById("versionsModal")) {
+    document.getElementById("cloudVersionsBtn").addEventListener("click", async () => {
+      document.getElementById("versionsModal").style.display = "flex";
+      await renderVersionsList();
+    });
+    document.getElementById("versionsKey").addEventListener("change", renderVersionsList);
+    document.getElementById("versionsClose").addEventListener("click", closeVersionsModal);
+    document.getElementById("versionsModal").addEventListener("click", ev => {
+      if (ev.target.id === "versionsModal") closeVersionsModal();
+    });
+  }
+
   renderCloudPanel();
   checkCloudHistoryFresh();
+}
+
+/* ---------- earlier versions of the shared uploads ---------- */
+
+const VERSION_LABEL = {
+  attribution: "the attribution",
+  index_weights: "the index weights",
+  sa_income: "the revenue split and GICS"
+};
+
+/** What a stored value holds, in the terms the dashboard uses for it.
+ *
+ *  A column of dates and byte counts only tells you which version is which if you already
+ *  knew; this is the part that makes "the one from before somebody emptied it" findable. */
+function describeStateValue(key, value) {
+  if (!value || typeof value !== "object") return "nothing";
+  if (key === "attribution") {
+    // through the migration on a copy, so a version saved before the store held several
+    // windows is still counted rather than read as empty
+    const v = typeof migrateAttributionStore === "function"
+      ? migrateAttributionStore(JSON.parse(JSON.stringify(value))) : value;
+    const periods = v.periods || {};
+    const windows = Object.keys(periods).length;
+    if (!windows) return "nothing";
+    const funds = Object.values(periods)
+      .reduce((n, p) => n + Object.keys(p.funds || {}).length, 0);
+    return `${funds} fund${funds === 1 ? "" : "s"} across `
+      + `${windows} window${windows === 1 ? "" : "s"}`;
+  }
+  if (key === "index_weights") {
+    const months = Object.keys(value.months || {}).length;
+    return months ? `${months} month${months === 1 ? "" : "s"} of weights` : "nothing";
+  }
+  if (key === "sa_income") {
+    const bits = [];
+    const n = o => Object.keys(o || {}).length;
+    if (n(value.source)) bits.push(`${n(value.source)} researched tickers`);
+    if (n(value.manual)) bits.push(`${n(value.manual)} manual split${n(value.manual) === 1 ? "" : "s"}`);
+    if (n(value.listing)) bits.push(`${n(value.listing)} listing call${n(value.listing) === 1 ? "" : "s"}`);
+    if (n(value.gicsSource)) bits.push(`${n(value.gicsSource)} GICS keys`);
+    return bits.length ? bits.join(", ") : "nothing";
+  }
+  return "";
+}
+
+function currentStateValue(key) {
+  if (key === "attribution") return typeof attributionStore !== "undefined" ? attributionStore : null;
+  if (key === "index_weights") return typeof indexWeightsStore !== "undefined" ? indexWeightsStore : null;
+  if (key === "sa_income") return typeof saIncStore !== "undefined" ? saIncStore : null;
+  return null;
+}
+
+function fmtVersionSize(n) {
+  if (n === null || n === undefined) return "—";
+  return n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+}
+
+function fmtVersionWhen(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? "—"
+    : d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function closeVersionsModal() {
+  document.getElementById("versionsModal").style.display = "none";
+}
+
+async function renderVersionsList() {
+  const key = document.getElementById("versionsKey").value;
+  const body = document.getElementById("versionsBody");
+  body.innerHTML = `<div class="card-subtitle">Reading…</div>`;
+
+  const live = currentStateValue(key);
+  const liveSize = live ? JSON.stringify(live).length : 0;
+  const liveSince = (typeof cloudStateMeta !== "undefined" && cloudStateMeta[key])
+    ? cloudStateMeta[key].updatedAt : null;
+  const now = `<div class="version-now">
+      <strong>In use now</strong> &mdash; ${escAttr(describeStateValue(key, live))},
+      ${fmtVersionSize(liveSize)}${liveSince ? `, since ${escAttr(fmtVersionWhen(liveSince))}` : ""}
+    </div>`;
+
+  let rows;
+  try {
+    rows = await cloudStateVersions(key);
+  } catch (e) {
+    // the likeliest cause by far is that the script has not been run on this project yet,
+    // and "something went wrong" would send somebody looking in the wrong place
+    body.innerHTML = now + `<div class="gap-note">Could not read the earlier versions:
+      ${escAttr(e.message)}. If <code>scripts/supabase_app_state_history.sql</code> has not
+      been run on this project, that is why &mdash; and nothing is being kept until it is.</div>`;
+    return;
+  }
+
+  if (!rows.length) {
+    body.innerHTML = now + `<div class="card-subtitle" style="margin-top:10px;">
+      Nothing has replaced this one yet, so there is no earlier version to go back to.</div>`;
+    return;
+  }
+
+  body.innerHTML = now + `<div class="table-scroll" style="margin-top:12px;">
+    <table>
+      <thead><tr>
+        <th>In use from</th><th>Until</th><th class="num">Size</th><th>Replaced by</th><th></th>
+      </tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td>${escAttr(fmtVersionWhen(r.live_from))}</td>
+        <td>${escAttr(fmtVersionWhen(r.replaced_at))}</td>
+        <td class="num">${fmtVersionSize(r.bytes)}</td>
+        <td>${escAttr(r.replaced_by_email || "a script")}</td>
+        <td><button class="btn sm" data-restore="${r.id}">Restore</button></td>
+      </tr>`).join("")}</tbody>
+    </table></div>`;
+
+  body.querySelectorAll("[data-restore]").forEach(b =>
+    b.addEventListener("click", () => restoreStateVersion(key, Number(b.dataset.restore), b)));
+}
+
+/** Restoring is an ordinary save of a value read from the history, so it takes the same
+ *  conditional write as anything else and merges the same way if somebody has moved in the
+ *  meantime. It is also itself undoable, because replacing the current value keeps it —
+ *  which is why this asks in plainer terms than a deletion does. */
+async function restoreStateVersion(key, id, btn) {
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Reading…";
+  try {
+    const value = await cloudStateVersionValue(id);
+    const was = describeStateValue(key, currentStateValue(key));
+    const will = describeStateValue(key, value);
+    btn.disabled = false;
+    btn.textContent = label;
+    if (!window.confirm(
+      `Restore ${VERSION_LABEL[key]} to this version?\n\n`
+      + `In use now:    ${was}\n`
+      + `This version:  ${will}\n\n`
+      + `It is saved back for everyone signed in. What it replaces is kept too, so this `
+      + `can be undone the same way.`)) return;
+
+    if (!adoptStateValue(key, value, { save: true })) {
+      throw new Error("nothing in this page reads that upload");
+    }
+    closeVersionsModal();
+    showToast(`Restored ${VERSION_LABEL[key]} — ${will}.`);
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = label;
+    showToast(`Could not restore that version: ${e.message}`);
+  }
 }
 
 /* ---------- GICS sectors ---------- */

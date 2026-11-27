@@ -342,40 +342,103 @@ async function cloudMergeAndWrite(key, mine, stamp, attempt) {
   applyMergedState(key, merged, clashes);
 }
 
+/** Put a value where the dashboard reads it, and redraw what shows it.
+ *
+ *  Two callers want this and want opposite things from the save that follows. A merge has
+ *  already been written, so its persist must not bounce straight back up — hence `save`
+ *  false, which borrows the hydrating flag. A restore has been written nowhere yet, so its
+ *  persist is the whole point. */
+function adoptStateValue(key, value, { save }) {
+  const quiet = !save;
+  if (quiet) cloudHydrating = true;
+  try {
+    if (key === "attribution" && typeof attributionStore !== "undefined") {
+      attributionStore = typeof migrateAttributionStore === "function"
+        ? migrateAttributionStore(value) : value;
+      // each window's file list is derived from its funds, so neither a merge nor a restore
+      // of an older shape can leave it recording the wrong files
+      if (typeof reconcileAttributionFiles === "function") reconcileAttributionFiles(attributionStore);
+      persistAttribution();
+      if (typeof renderAttributionSourceList === "function") renderAttributionSourceList();
+      if (typeof renderAttributionSection === "function") renderAttributionSection();
+    } else if (key === "index_weights" && typeof indexWeightsStore !== "undefined") {
+      indexWeightsStore = value;
+      persistIndexWeights();
+      if (typeof renderIndexWeightsSourceList === "function") renderIndexWeightsSourceList();
+      if (typeof renderActiveShareSection === "function") renderActiveShareSection();
+    } else if (key === "sa_income" && typeof saIncStore !== "undefined") {
+      saIncStore = value;
+      persistSaIncStore();
+      if (typeof renderSaIncomeSourceList === "function") renderSaIncomeSourceList();
+      if (typeof renderGicsSourceList === "function") renderGicsSourceList();
+      if (typeof renderLookThroughSection === "function") renderLookThroughSection();
+      if (typeof renderBreakdownSection === "function") renderBreakdownSection();
+    } else {
+      return false;
+    }
+  } finally {
+    if (quiet) cloudHydrating = false;
+  }
+  return true;
+}
+
 /** Put the merge back where the dashboard reads it, and say that it happened.
  *
  *  Two reasons, and the second is the one that bites: the screen would otherwise show this
  *  browser's version while the shared copy holds the merge, and the next save would then be
  *  computed against a baseline that was never written anywhere. */
 function applyMergedState(key, merged, clashes) {
-  cloudHydrating = true;                   // the persist below must not bounce straight back up
-  try {
-    if (key === "attribution" && typeof attributionStore !== "undefined") {
-      attributionStore = typeof migrateAttributionStore === "function"
-        ? migrateAttributionStore(merged) : merged;
-      persistAttribution();
-      if (typeof renderAttributionSourceList === "function") renderAttributionSourceList();
-      if (typeof renderAttributionSection === "function") renderAttributionSection();
-    } else if (key === "index_weights" && typeof indexWeightsStore !== "undefined") {
-      indexWeightsStore = merged;
-      persistIndexWeights();
-      if (typeof renderIndexWeightsSourceList === "function") renderIndexWeightsSourceList();
-      if (typeof renderActiveShareSection === "function") renderActiveShareSection();
-    } else if (key === "sa_income" && typeof saIncStore !== "undefined") {
-      saIncStore = merged;
-      persistSaIncStore();
-      if (typeof renderSaIncomeSourceList === "function") renderSaIncomeSourceList();
-      if (typeof renderLookThroughSection === "function") renderLookThroughSection();
-    }
-  } finally {
-    cloudHydrating = false;
-  }
+  adoptStateValue(key, merged, { save: false });
   if (typeof showToast !== "function") return;
   const label = cloudStateLabel(key);
   showToast(clashes.length
     ? `Somebody else had changed ${label} too. Both sets were kept, and yours was used `
       + `where the two overlapped.`
     : `Somebody else had changed ${label} too. Both sets were kept.`);
+}
+
+/* ---------- earlier versions ----------
+ *
+ * Every value replaced in app_state is kept by a trigger; see
+ * scripts/supabase_app_state_history.sql. Restoring is not a special operation on the
+ * database — it is an ordinary save of a value that was read from there, so it goes through
+ * the same conditional write as any other change and merges the same way if somebody else
+ * has moved in the meantime.
+ */
+
+/** The versions kept for a key, newest first, without their values.
+ *
+ *  Without, deliberately: twenty versions of the index weights is several megabytes, and a
+ *  list only has to say when, how large and by whom. A value is fetched one at a time, when
+ *  somebody actually asks for one. */
+async function cloudStateVersions(key) {
+  const c = getCloudClient();
+  if (!c) return [];
+  const { data, error } = await c.from("app_state_history")
+    .select("id,key,live_from,replaced_at,bytes,replaced_by_email")
+    .eq("key", key)
+    .order("replaced_at", { ascending: false })
+    .limit(50);
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+async function cloudStateVersionValue(id) {
+  const c = getCloudClient();
+  if (!c) throw new Error("not signed in");
+  const { data, error } = await c.from("app_state_history").select("value").eq("id", id);
+  if (error) throw new Error(error.message);
+  if (!data || !data.length) throw new Error("that version is no longer kept");
+  return data[0].value;
+}
+
+/** Whether the history table is there at all, so the dashboard can say "run the script"
+ *  rather than "something went wrong" on a project where it has not been run yet. */
+async function cloudHistoryAvailable() {
+  const c = getCloudClient();
+  if (!c) return false;
+  const { error } = await c.from("app_state_history").select("id").limit(1);
+  return !error;
 }
 
 /** When each shared upload was last written centrally. Three rows, no values. */

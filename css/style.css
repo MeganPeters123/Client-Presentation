@@ -352,3 +352,9 @@ table.data-table td.attr-strong{ font-weight:650; }
 .source-group-head .n{ font-weight:400; color:var(--ink-muted); }
 .source-group-head .rm{ margin-left:auto; cursor:pointer; color:var(--ink-muted); padding:0 3px; }
 .source-group-head .rm:hover{ color:var(--bad); }
+
+/* ---- earlier versions of the shared uploads ---- */
+.version-now{ font-size:12.5px; padding:10px 12px; border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface-2); }
+#versionsModal .modal{ max-width:620px; }
+#versionsModal table{ width:100%; font-size:12px; }
+#versionsModal .table-scroll{ max-height:46vh; overflow-y:auto; }

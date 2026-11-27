@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aylett & Co — AUM Dashboard</title>
-<link rel="stylesheet" href="css/style.css?v=4eccf93a">
+<link rel="stylesheet" href="css/style.css?v=dec25123">
 </head>
 <body>
 
@@ -60,6 +60,7 @@
           </div>
           <div id="cloudSignedIn" style="display:none; gap:8px; align-items:center;">
             <button class="btn" id="cloudLoadBtn">Load latest</button>
+            <button class="btn" id="cloudVersionsBtn" title="What the shared uploads were before they were last changed">Earlier versions</button>
             <button class="btn" id="cloudSignOutBtn">Sign out</button>
           </div>
         </div>
@@ -980,6 +981,7 @@
             <tr><td>Attribution shows a code like <code>NPN SJ</code> instead of a name</td><td>The index weights were saved before names were read out of them</td><td>Upload <code>Index Weights - Month End.csv</code> again</td></tr>
             <tr><td>Attribution shows only some funds</td><td>Only those files were uploaded for the window you are looking at. Each window keeps its own set.</td><td>Check the window selector first, then upload whichever funds are missing from it</td></tr>
             <tr><td>A fund is missing from the total</td><td>Nothing was saved for it near that month</td><td>Read the note under the funds table &mdash; it names them and gives the last figure each one had</td></tr>
+            <tr><td>Something shared was deleted or overwritten by mistake</td><td>Every change to the revenue split, index weights or attribution keeps what was there before &mdash; the last 20 of them</td><td>Data tab &rarr; <strong>Earlier versions</strong>. Pick the upload, find the version by when it was in use and how large it was, and press Restore. Restoring is itself kept, so it can be undone the same way.</td></tr>
             <tr><td>A fund shows an older figure</td><td>Its file had not arrived, so the last one is carried forward</td><td>The note says which fund and which month it is standing on. If it is the <strong>Hedge Fund</strong>, its valuation has to be pulled by hand &mdash; see step 3.</td></tr>
           </tbody>
         </table>
@@ -992,7 +994,7 @@
     <div>Upload at least one file above to build the dashboard.</div>
   </div>
 
-  <div class="footer-note">Uploaded files are read in your browser. The saved history, revenue split, index weights and overrides are stored in Aylett's Supabase project and can only be read once signed in.</div>
+  <div class="footer-note">Uploaded files are read in your browser. The saved history, revenue split, GICS, index weights, attribution and overrides are stored in Aylett's Supabase project and can only be read once signed in.</div>
 </div>
 
 <!-- Column mapping modal -->
@@ -1023,6 +1025,30 @@
   </div>
 </div>
 
+<!-- Earlier versions of the shared uploads -->
+<div class="modal-backdrop" id="versionsModal" style="display:none;" data-no-export>
+  <div class="modal">
+    <h2>Earlier versions</h2>
+    <p class="hint">
+      Each time one of the shared uploads is replaced, what it was before is kept &mdash; the
+      last 20 of them. Restoring one saves it back for everybody, exactly like any other
+      change, so it can be undone the same way.
+    </p>
+    <div class="field">
+      <label>Which upload</label>
+      <select id="versionsKey">
+        <option value="attribution">Attribution</option>
+        <option value="index_weights">Index weights</option>
+        <option value="sa_income">Revenue split and GICS</option>
+      </select>
+    </div>
+    <div id="versionsBody"></div>
+    <div class="modal-actions">
+      <button class="btn" id="versionsClose">Close</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -1033,12 +1059,12 @@
 <script src="js/holdings.js?v=619cd99d"></script>
 <script src="js/history.js?v=ed349218"></script>
 <script src="js/lookthrough.js?v=e431cd29"></script>
-<script src="js/cloud.js?v=1abd270e"></script>
+<script src="js/cloud.js?v=227f1542"></script>
 <script src="js/activeshare.js?v=87ff88a8"></script>
 <script src="js/attribution.js?v=5a4f9188"></script>
 <script src="js/charts.js?v=b31600c0"></script>
 <script src="js/tabs.js?v=b78e3903"></script>
-<script src="js/app.js?v=a0dfb2d6"></script>
+<script src="js/app.js?v=1592b7a1"></script>
 <script src="js/export.js?v=c93eaddd"></script>
 </body>
 </html>
