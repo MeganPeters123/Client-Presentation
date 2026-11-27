@@ -145,21 +145,248 @@ const cloudSaveTimers = {};
 // a round trip for nothing.
 let cloudHydrating = false;
 
+/* ---------- not overwriting each other ----------
+ *
+ * Saving used to be an upsert of the whole value, which always won. With one person that is
+ * the same thing as saving. With two it is a silent overwrite of whoever did not press save
+ * last — not of whoever was wrong — and it is worse than it sounds: the sign-in session
+ * persists, while app_state is re-read only when somebody signs in or presses Load latest.
+ * A browser can therefore sit on a week-old copy and write it back over everything that has
+ * arrived since. Nothing on screen would say so, and there is no history here to recover
+ * from.
+ *
+ * So a save is conditional on the row still being the one we read. Postgres settles who got
+ * there first; a write that matches nothing means it moved, and then we read it, merge
+ * against what we started from, and try again rather than insisting.
+ */
+
+/** What we last saw centrally per key: the row's updated_at, and the value as a baseline.
+ *
+ *  The baseline is what makes a merge possible at all. Without it a save can only say
+ *  "write all of this"; with it, it can say "these are the parts I changed", and whatever
+ *  else moved in the meantime survives. */
+const cloudStateMeta = {};
+
+const CLOUD_SEEN_KEY = "aum-dashboard-cloud-seen";
+
+/** Only the timestamps are kept across reloads, never the baselines — the attribution store
+ *  alone runs to well over a hundred kilobytes, and localStorage is not the place for a
+ *  second copy of it. A reload therefore starts with no baseline, which the merge below
+ *  reads as "I have changed nothing of theirs": the conservative answer, and the one that
+ *  cannot delete somebody else's work. */
+function loadCloudSeen() {
+  try { return JSON.parse(localStorage.getItem(CLOUD_SEEN_KEY) || "{}"); }
+  catch (e) { return {}; }
+}
+
+function rememberCloudSeen(key, updatedAt) {
+  const seen = loadCloudSeen();
+  seen[key] = updatedAt;
+  try { localStorage.setItem(CLOUD_SEEN_KEY, JSON.stringify(seen)); }
+  catch (e) { /* a full or blocked localStorage costs us the bar, not the save */ }
+}
+
+/** A baseline has to be a copy, never the store itself.
+ *
+ *  This was a real bug, and a quiet one: migrateAttributionStore hands back the very object
+ *  it was given when the shape is already current, so `baseline = row.value` and the live
+ *  store were one object. Every edit then updated the baseline too, the merge concluded
+ *  that nothing had been changed here, and it took the other copy wholesale — throwing away
+ *  the import that triggered the save. The merge was right; what it was being asked to
+ *  compare was not.
+ *
+ *  JSON rather than structuredClone, because JSON is exactly what gets written: a baseline
+ *  that keeps something the wire would drop would compare unequal to itself a moment later. */
+function cloneJson(v) {
+  try { return JSON.parse(JSON.stringify(v)); }
+  catch (e) { return v; }
+}
+
+function cloudStateLabel(key) {
+  return { attribution: "the attribution", index_weights: "the index weights",
+           sa_income: "the revenue split" }[key] || key;
+}
+
+function isPlainObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+function sameJson(a, b) {
+  if (a === b) return true;
+  if (a === null || b === null || typeof a !== "object" || typeof b !== "object") return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  return ka.every(k => Object.prototype.hasOwnProperty.call(b, k) && sameJson(a[k], b[k]));
+}
+
+/** Three-way merge: what I started from, what I have now, what is there now.
+ *
+ *  Decided key by key down the tree. A key I have not touched takes theirs, their removal of
+ *  it included; a key they have not touched takes mine, my removal included. Only a key we
+ *  both changed has to be judged, and there mine wins — but the path is recorded, so "we
+ *  both edited that" gets reported rather than settled in silence.
+ *
+ *  Arrays are leaves. Every array in these stores — the file names, a fund's holding rows —
+ *  is rewritten whole, so merging them item by item would produce a state neither of us
+ *  ever had. */
+function threeWayMerge(base, mine, theirs, clashes, path) {
+  if (!isPlainObject(mine) || !isPlainObject(theirs)) {
+    if (sameJson(mine, base)) return theirs;
+    if (!sameJson(theirs, base) && path) clashes.push(path);
+    return mine;
+  }
+  const out = {};
+  const b = isPlainObject(base) ? base : {};
+  new Set([...Object.keys(b), ...Object.keys(mine), ...Object.keys(theirs)]).forEach(k => {
+    const mv = mine[k], tv = theirs[k], bv = b[k];
+    const here = path ? `${path}.${k}` : k;
+    const iMoved = !sameJson(mv, bv);
+    const theyMoved = !sameJson(tv, bv);
+    if (!iMoved) { if (tv !== undefined) out[k] = tv; return; }
+    if (!theyMoved) { if (mv !== undefined) out[k] = mv; return; }
+    // both of us moved it, and a removal on either side cannot be merged any further, so it
+    // is a clash and mine stands
+    if (mv === undefined || tv === undefined) {
+      clashes.push(here);
+      if (mv !== undefined) out[k] = mv;
+      return;
+    }
+    out[k] = threeWayMerge(bv, mv, tv, clashes, here);
+  });
+  return out;
+}
+
 function cloudSaveState(key, value, delay = 1500) {
   if (!getCloudClient() || cloudHydrating) return;
   clearTimeout(cloudSaveTimers[key]);
-  cloudSaveTimers[key] = setTimeout(async () => {
-    try {
-      const session = await cloudSession();
-      if (!session) return;                    // signed out: localStorage still has it
-      const { error } = await getCloudClient()
-        .from("app_state")
-        .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" });
-      if (error) console.error(`Could not save ${key} centrally`, error.message);
-    } catch (e) {
-      console.error(`Could not save ${key} centrally`, e);
+  cloudSaveTimers[key] = setTimeout(() => cloudWriteState(key, value), delay);
+}
+
+async function cloudWriteState(key, value, attempt = 0) {
+  const c = getCloudClient();
+  if (!c) return;
+  try {
+    const session = await cloudSession();
+    if (!session) return;                    // signed out: localStorage still has it
+
+    const meta = cloudStateMeta[key];
+    const stamp = new Date().toISOString();
+
+    // nothing read this session, so there is no row we can honestly claim to be updating:
+    // go the long way round and merge onto whatever is there
+    if (!meta || !meta.updatedAt) return await cloudMergeAndWrite(key, value, stamp, attempt);
+
+    const { data, error } = await c.from("app_state")
+      .update({ value, updated_at: stamp })
+      .eq("key", key).eq("updated_at", meta.updatedAt)
+      .select("key,updated_at");
+    if (error) throw new Error(error.message);
+    if (data && data.length) {
+      cloudStateMeta[key] = { updatedAt: data[0].updated_at, baseline: cloneJson(value) };
+      rememberCloudSeen(key, data[0].updated_at);
+      return;
     }
-  }, delay);
+    // matched nothing: the row moved under us, or there is no row yet
+    await cloudMergeAndWrite(key, value, stamp, attempt);
+  } catch (e) {
+    console.error(`Could not save ${key} centrally`, e.message || e);
+    if (typeof showToast === "function") {
+      showToast(`Could not save ${cloudStateLabel(key)} centrally. It is still in this browser.`);
+    }
+  }
+}
+
+async function cloudMergeAndWrite(key, mine, stamp, attempt) {
+  const c = getCloudClient();
+  const { data, error } = await c.from("app_state").select("key,value,updated_at").eq("key", key);
+  if (error) throw new Error(error.message);
+  const row = (data || [])[0];
+
+  if (!row) {
+    const { error: insErr } = await c.from("app_state").insert({ key, value: mine, updated_at: stamp });
+    if (insErr) {
+      // somebody inserted it between our read and our insert: round again
+      if (attempt < 2) return cloudWriteState(key, mine, attempt + 1);
+      throw new Error(insErr.message);
+    }
+    cloudStateMeta[key] = { updatedAt: stamp, baseline: cloneJson(mine) };
+    rememberCloudSeen(key, stamp);
+    return;
+  }
+
+  const clashes = [];
+  const baseline = (cloudStateMeta[key] || {}).baseline || {};
+  const merged = threeWayMerge(baseline, mine, row.value, clashes, "");
+
+  // Before the write, not after: whatever goes up is what everybody else will read. A
+  // window's file list is derived from the funds in it, so a merge cannot leave it
+  // recording one of the two files that went into it.
+  if (key === "attribution" && typeof reconcileAttributionFiles === "function") {
+    reconcileAttributionFiles(merged);
+  }
+
+  const { data: wrote, error: upErr } = await c.from("app_state")
+    .update({ value: merged, updated_at: stamp })
+    .eq("key", key).eq("updated_at", row.updated_at)
+    .select("key,updated_at");
+  if (upErr) throw new Error(upErr.message);
+  if (!wrote || !wrote.length) {
+    if (attempt < 2) return cloudWriteState(key, mine, attempt + 1);
+    throw new Error("the shared copy kept changing while this was saving");
+  }
+
+  // merged shares its subtrees with the live store, so this is copied for the same reason
+  cloudStateMeta[key] = { updatedAt: wrote[0].updated_at, baseline: cloneJson(merged) };
+  rememberCloudSeen(key, wrote[0].updated_at);
+  applyMergedState(key, merged, clashes);
+}
+
+/** Put the merge back where the dashboard reads it, and say that it happened.
+ *
+ *  Two reasons, and the second is the one that bites: the screen would otherwise show this
+ *  browser's version while the shared copy holds the merge, and the next save would then be
+ *  computed against a baseline that was never written anywhere. */
+function applyMergedState(key, merged, clashes) {
+  cloudHydrating = true;                   // the persist below must not bounce straight back up
+  try {
+    if (key === "attribution" && typeof attributionStore !== "undefined") {
+      attributionStore = typeof migrateAttributionStore === "function"
+        ? migrateAttributionStore(merged) : merged;
+      persistAttribution();
+      if (typeof renderAttributionSourceList === "function") renderAttributionSourceList();
+      if (typeof renderAttributionSection === "function") renderAttributionSection();
+    } else if (key === "index_weights" && typeof indexWeightsStore !== "undefined") {
+      indexWeightsStore = merged;
+      persistIndexWeights();
+      if (typeof renderIndexWeightsSourceList === "function") renderIndexWeightsSourceList();
+      if (typeof renderActiveShareSection === "function") renderActiveShareSection();
+    } else if (key === "sa_income" && typeof saIncStore !== "undefined") {
+      saIncStore = merged;
+      persistSaIncStore();
+      if (typeof renderSaIncomeSourceList === "function") renderSaIncomeSourceList();
+      if (typeof renderLookThroughSection === "function") renderLookThroughSection();
+    }
+  } finally {
+    cloudHydrating = false;
+  }
+  if (typeof showToast !== "function") return;
+  const label = cloudStateLabel(key);
+  showToast(clashes.length
+    ? `Somebody else had changed ${label} too. Both sets were kept, and yours was used `
+      + `where the two overlapped.`
+    : `Somebody else had changed ${label} too. Both sets were kept.`);
+}
+
+/** When each shared upload was last written centrally. Three rows, no values. */
+async function cloudStateUpdatedAt() {
+  const c = getCloudClient();
+  if (!c) return {};
+  const { data, error } = await c.from("app_state").select("key,updated_at");
+  if (error) return {};
+  const out = {};
+  (data || []).forEach(r => { out[r.key] = r.updated_at; });
+  return out;
 }
 
 /** Pull both back down. Returns what it found, so the caller can say so rather than
@@ -167,12 +394,16 @@ function cloudSaveState(key, value, delay = 1500) {
 async function cloudLoadState() {
   const c = getCloudClient();
   if (!c) return { saIncome: false, indexWeights: false, attribution: false };
-  const { data, error } = await c.from("app_state").select("key,value");
+  const { data, error } = await c.from("app_state").select("key,value,updated_at");
   if (error) throw new Error(error.message);
 
   const found = { saIncome: false, indexWeights: false, attribution: false };
   cloudHydrating = true;
   (data || []).forEach(row => {
+    // what was read and when: the two things a later save needs in order to write without
+    // overwriting anybody, and the timestamp the stale bar compares against
+    cloudStateMeta[row.key] = { updatedAt: row.updated_at, baseline: cloneJson(row.value) };
+    rememberCloudSeen(row.key, row.updated_at);
     if (row.key === "sa_income" && row.value && typeof saIncStore !== "undefined") {
       saIncStore = { ...saIncStore, ...row.value };
       persistSaIncStore();

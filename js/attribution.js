@@ -146,6 +146,21 @@ function attributionFor(fund, key) {
   return p ? (p.funds || {})[fund] || null : null;
 }
 
+/** Rebuild each window's file list from the funds in it.
+ *
+ *  The list is only ever a record of where a window came from, and every fund already
+ *  carries the file it came from. That makes it derivable — which matters after a merge,
+ *  because a list is an array, arrays merge as single units, and two people adding a file
+ *  each would otherwise leave only one of the two names recorded. Nothing displays this
+ *  today; deriving it means nothing is recorded wrongly for whoever decides to. */
+function reconcileAttributionFiles(store) {
+  Object.values((store && store.periods) || {}).forEach(p => {
+    const names = Object.values(p.funds || {}).map(f => f.fileName).filter(Boolean);
+    p.files = [...new Set(names)].sort();
+  });
+  return store;
+}
+
 function removeAttributionPeriod(key) {
   if (!attributionStore.periods) return;
   delete attributionStore.periods[key];

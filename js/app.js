@@ -193,6 +193,25 @@ async function handleSaIncomeUpload(file) {
   }
 }
 
+/** Ask before something goes that cannot be brought back.
+ *
+ *  A native confirm on purpose. It cannot be missed, it cannot be clicked through by
+ *  accident, and a prettier modal of our own would be exactly as safe. What matters is the
+ *  wording: what goes, and whether it goes for everybody or only here. Those are different
+ *  mistakes, and until now neither of them asked.
+ */
+function confirmDestructive(what, shared) {
+  return window.confirm(
+    what + "\n\n"
+    + (shared
+        ? "This is part of the shared store, so it goes for everyone signed in, not just "
+          + "this browser."
+        : "This browser only. Everyone else keeps theirs, and uploading the file again "
+          + "brings it back.")
+    + "\n\nThere is no undo."
+  );
+}
+
 function renderSaIncomeSourceList() {
   const slot = document.getElementById("slot-saincome");
   const list = document.getElementById("saIncomeSourceList");
@@ -215,8 +234,18 @@ function renderSaIncomeSourceList() {
     (counts.listing ? chip("Your listing calls", counts.listing, "listing", "Clear all listing overrides") : "");
   list.querySelectorAll(".rm").forEach(el => el.addEventListener("click", ev => {
     ev.stopPropagation();
-    if (el.dataset.clear === "source") clearSaIncSource();
-    else if (el.dataset.clear === "manual") Object.keys(saIncStore.manual).forEach(clearManualSaInc);
+    const which = el.dataset.clear;
+    // the two bulk ones are the research itself — splits and calls made by hand, position
+    // by position, and nowhere else
+    const ask = which === "source"
+      ? `Remove ${saIncStore.sheetName || saIncStore.fileName}, and the ${counts.tickers} `
+        + `researched ticker${counts.tickers === 1 ? "" : "s"} it carries?`
+      : which === "manual"
+        ? `Clear ${counts.manual === 1 ? "the one revenue split" : `all ${counts.manual} revenue splits`} set by hand?`
+        : `Clear ${counts.listing === 1 ? "the one listing call" : `all ${counts.listing} listing calls`} made by hand?`;
+    if (!confirmDestructive(ask, true)) return;
+    if (which === "source") clearSaIncSource();
+    else if (which === "manual") Object.keys(saIncStore.manual).forEach(clearManualSaInc);
     else Object.keys(saIncStore.listing).forEach(t => setListingOverride(t, null));
     renderSaIncomeSourceList();
     renderLookThroughSection();
@@ -294,8 +323,18 @@ function renderAttributionSourceList() {
   }).join("");
   list.querySelectorAll(".rm").forEach(el => el.addEventListener("click", ev => {
     ev.stopPropagation();
-    if (el.dataset.fund) removeAttributionFund(el.dataset.period, el.dataset.fund);
-    else removeAttributionPeriod(el.dataset.period);
+    const period = el.dataset.period;
+    const label = attributionPeriodLabel(period);
+    if (el.dataset.fund) {
+      if (!confirmDestructive(`Remove ${el.dataset.fund} from ${label}?`, true)) return;
+      removeAttributionFund(period, el.dataset.fund);
+    } else {
+      const n = listAttributionFunds(period).length;
+      if (!confirmDestructive(
+        `Remove the whole ${label} window, and `
+        + `${n === 1 ? "the one fund" : `all ${n} funds`} in it?`, true)) return;
+      removeAttributionPeriod(period);
+    }
     renderAttributionSourceList();
     renderAttributionSection();
   }));
@@ -527,6 +566,10 @@ function renderIndexWeightsSourceList() {
     </div>`;
   list.querySelector(".rm").addEventListener("click", ev => {
     ev.stopPropagation();
+    if (!confirmDestructive(
+      `Remove ${indexWeightsStore.fileName || "the index weights"}, and `
+      + `${months.length === 1 ? "the one month" : `all ${months.length} months`} of weights in it?`,
+      true)) return;
     clearIndexWeights();
     renderIndexWeightsSourceList();
     renderActiveShareSection();
@@ -560,7 +603,11 @@ function renderHoldingsSourceList() {
       <span class="rm" data-fund="${s.fund.replace(/"/g, "&quot;")}" title="Remove this fund">✕</span>
     </div>`).join("");
   list.querySelectorAll(".rm").forEach(el => {
-    el.addEventListener("click", ev => { ev.stopPropagation(); removeFundSnapshot(el.dataset.fund); });
+    el.addEventListener("click", ev => {
+      ev.stopPropagation();
+      if (!confirmDestructive(`Remove ${el.dataset.fund} from what is loaded here?`, false)) return;
+      removeFundSnapshot(el.dataset.fund);
+    });
   });
 }
 
@@ -748,7 +795,11 @@ function renderTradeSourceChips() {
       <span class="rm" data-file="${s.fileName.replace(/"/g, "&quot;")}" title="Remove this file">✕</span>
     </div>`).join("");
   list.querySelectorAll(".rm").forEach(el => {
-    el.addEventListener("click", ev => { ev.stopPropagation(); removeTradeSource(el.dataset.file); });
+    el.addEventListener("click", ev => {
+      ev.stopPropagation();
+      if (!confirmDestructive(`Remove ${el.dataset.file} from what is loaded here?`, false)) return;
+      removeTradeSource(el.dataset.file);
+    });
   });
 }
 
@@ -2590,15 +2641,37 @@ async function checkCloudHistoryFresh() {
   bar.style.display = "none";
   try {
     if (!(await cloudSession())) return;                 // signed out: nothing to compare against
+    const parts = [];
+
     const remote = await cloudHistoryUpdatedAt();
-    if (!remote) return;
     const local = localHistorySavedAt();
     // a minute of slack, so the clock skew between this machine and the server is not news
-    if (local && remote - local < 60000) return;
-    const when = remote.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-    document.getElementById("staleHistoryText").textContent = local
-      ? `The saved history was rebuilt on ${when}. What is on screen is this browser's older copy.`
-      : `There is a saved history, rebuilt on ${when}. Nothing is loaded in this browser yet.`;
+    if (remote && !(local && remote - local < 60000)) {
+      const when = remote.toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      parts.push(local
+        ? `The saved history was rebuilt on ${when}. What is on screen is this browser's older copy.`
+        : `There is a saved history, rebuilt on ${when}. Nothing is loaded in this browser yet.`);
+    }
+
+    // The shared uploads move whenever anybody else saves one, and a sign-in that persists
+    // means this browser can go weeks without re-reading them. Saving is safe either way
+    // now, but reading figures off a copy that is quietly out of date is still worth being
+    // told about — and this is the one bar that shows whichever tab is open.
+    const seen = typeof loadCloudSeen === "function" ? loadCloudSeen() : {};
+    const central = typeof cloudStateUpdatedAt === "function" ? await cloudStateUpdatedAt() : {};
+    const moved = Object.keys(central)
+      .filter(k => seen[k] && new Date(central[k]) - new Date(seen[k]) > 60000)
+      .map(cloudStateLabel);
+    if (moved.length) {
+      const names = moved.length > 1
+        ? `${moved.slice(0, -1).join(", ")} and ${moved[moved.length - 1]}`
+        : moved[0];
+      parts.push(`${names.charAt(0).toUpperCase()}${names.slice(1)} changed centrally since `
+        + `this browser last read ${moved.length > 1 ? "them" : "it"}.`);
+    }
+
+    if (!parts.length) return;
+    document.getElementById("staleHistoryText").textContent = parts.join(" ");
     bar.style.display = "flex";
   } catch (e) {
     // a failed check is not worth a word on screen: the figures that are there are still the
@@ -2747,6 +2820,9 @@ function renderGicsSourceList() {
     </div>`;
   list.querySelector(".rm").addEventListener("click", ev => {
     ev.stopPropagation();
+    if (!confirmDestructive(
+      `Remove ${saIncStore.gicsFileName || "the GICS file"}, and the `
+      + `${Object.keys(map).length} sector keys it carries?`, true)) return;
     clearGicsSource();
     renderGicsSourceList();
     renderBreakdownSection();
